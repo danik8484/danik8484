@@ -4,8 +4,8 @@ import type { Context } from "hono";
 import type { AppEnv } from "./context";
 import type { Env } from "./env";
 import { type Db } from "./db/client";
-import { users, loginCodes, sessions } from "./db/schema";
-import { sendLoginCode } from "./email";
+import { users, loginCodes, loginLinks, sessions } from "./db/schema";
+import { EmailNotConfigured, sendLoginCode } from "./email";
 
 const COOKIE = "sid";
 const SESSION_DAYS = 60;
@@ -74,7 +74,14 @@ export async function requestCode(db: Db, env: Env, email: string): Promise<Requ
     .insert(loginCodes)
     .values({ email, codeHash: await sha256(email + ":" + code), expiresAt: now + CODE_TTL_MS, createdAt: now })
     .run();
-  await sendLoginCode(env, email, code);
+  try {
+    await sendLoginCode(env, email, code);
+  } catch (e) {
+    if (e instanceof EmailNotConfigured) {
+      return { ok: false, error: "שליחת קודים במייל עדיין לא הופעלה. בקש מהמנהל קישור כניסה.", status: 503 };
+    }
+    throw e;
+  }
   return { ok: true, devCode: env.APP_ENV === "development" ? code : undefined };
 }
 
@@ -134,4 +141,28 @@ export async function getSessionUser(c: Context<AppEnv>, db: Db) {
     .get();
   if (!row || !row.user.active) return null;
   return row.user;
+}
+
+const LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** One-time sign-in link an admin can send by WhatsApp. Valid 7 days, single use. */
+export async function createLoginLink(db: Db, userId: number, createdById: number | null): Promise<{ token: string; expiresAt: number }> {
+  const token = randomId();
+  const now = Date.now();
+  const expiresAt = now + LINK_TTL_MS;
+  await db.insert(loginLinks).values({ tokenHash: await sha256("link:" + token), userId, createdById, expiresAt, createdAt: now }).run();
+  return { token, expiresAt };
+}
+
+export async function redeemLoginLink(db: Db, token: string): Promise<{ ok: true; userId: number } | { ok: false; error: string }> {
+  if (!/^[0-9a-f]{64}$/.test(token)) return { ok: false, error: "הקישור אינו תקין" };
+  const now = Date.now();
+  const row = await db.select().from(loginLinks).where(eq(loginLinks.tokenHash, await sha256("link:" + token))).get();
+  if (!row) return { ok: false, error: "הקישור אינו תקין" };
+  if (row.usedAt) return { ok: false, error: "הקישור כבר נוצל. בקש קישור חדש." };
+  if (row.expiresAt < now) return { ok: false, error: "פג תוקף הקישור. בקש קישור חדש." };
+  const user = await db.select().from(users).where(eq(users.id, row.userId)).get();
+  if (!user || !user.active) return { ok: false, error: "המשתמש אינו פעיל" };
+  await db.update(loginLinks).set({ usedAt: now }).where(eq(loginLinks.id, row.id)).run();
+  return { ok: true, userId: user.id };
 }

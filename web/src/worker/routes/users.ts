@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import type { AppEnv } from "../context";
 import { users, sessions } from "../db/schema";
 import { toPublicUser } from "../serialize";
-import { normalizeEmail } from "../auth";
+import { createLoginLink, normalizeEmail } from "../auth";
 import { int, readJson, str } from "../validate";
 import type { Role } from "@shared/types";
 
@@ -107,4 +107,15 @@ userRoutes.patch("/:id", async (c) => {
   if (patch.active === 0) await db.delete(sessions).where(eq(sessions.userId, id)).run();
   const updated = await db.select().from(users).where(eq(users.id, id)).get();
   return c.json({ ok: true, user: toPublicUser(updated!, true) });
+});
+
+/** Admin: one-time sign-in link for a teammate (e.g. to send by WhatsApp). */
+userRoutes.post("/:id/login-link", async (c) => {
+  const id = int(c.req.param("id"));
+  const target = c.get("team").find((u) => u.id === id);
+  if (id === null || !target) return c.json({ error: "לא נמצא" }, 404);
+  if (target.active !== 1) return c.json({ error: "המשתמש מושבת" }, 400);
+  const { token, expiresAt } = await createLoginLink(c.get("db"), id, c.get("user").id);
+  const url = new URL(c.req.url);
+  return c.json({ ok: true, url: `${url.origin}/login?t=${token}`, expiresAt });
 });

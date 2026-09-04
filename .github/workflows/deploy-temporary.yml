@@ -1,0 +1,72 @@
+name: Deploy (temporary Cloudflare account)
+
+# First-time deployment without any Cloudflare credentials:
+# creates a temporary account, deploys, and prints the claim URL + first login link
+# ENCRYPTED with .github/deploy-pubkey.pem (this repo is public, logs are public).
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/hi-l4avs8"]
+
+jobs:
+  deploy-temporary:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-temp]')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+      - name: Create D1 database on a temporary account
+        run: |
+          set -euo pipefail
+          npx wrangler d1 create fitness-daily-tasks --temporary > d1.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' d1.out; exit 1; }
+          DB_ID=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' d1.out | head -1)
+          test -n "$DB_ID"
+          sed -i "s/REPLACE_WITH_YOUR_D1_DATABASE_ID/$DB_ID/" wrangler.jsonc
+          echo "database created"
+
+      - name: Apply migrations
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply fitness-daily-tasks --remote --temporary > mig.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' mig.out; exit 1; }
+          grep -c "✅" mig.out || true
+
+      - name: Create the first admin login link
+        run: |
+          set -euo pipefail
+          TOKEN=$(openssl rand -hex 32)
+          echo "::add-mask::$TOKEN"
+          HASH=$(printf 'link:%s' "$TOKEN" | sha256sum | cut -d' ' -f1)
+          NOW=$(date +%s000)
+          EXP=$((NOW + 7*24*60*60*1000))
+          npx wrangler d1 execute fitness-daily-tasks --remote --temporary --command "INSERT INTO login_links (token_hash, user_id, created_by_id, expires_at, created_at) VALUES ('$HASH', 1, NULL, $EXP, $NOW);" > link.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' link.out; exit 1; }
+          echo "$TOKEN" > token.txt
+          echo "login link created"
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --temporary > deploy.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' deploy.out; exit 1; }
+          APP_URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.out | head -1)
+          CLAIM_URL=$(grep -oE 'https://[^ ]*claim[^ ]*' deploy.out | head -1)
+          echo "::add-mask::$CLAIM_URL"
+          test -n "$APP_URL"
+          printf '{"appUrl":"%s","claimUrl":"%s","loginLink":"%s/login?t=%s"}\n' "$APP_URL" "$CLAIM_URL" "$APP_URL" "$(cat token.txt)" > payload.json
+          sed -E 's#https?://[^ "]+#<url>#g' deploy.out | tail -15
+
+      - name: Encrypt result for the operator
+        run: |
+          set -euo pipefail
+          openssl rand -hex 32 > aes.key
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in payload.json -out payload.enc -pass file:aes.key
+          openssl pkeyutl -encrypt -pubin -inkey ../.github/deploy-pubkey.pem -in aes.key -out aes.key.enc
+          echo "===KEY==="; base64 -w0 aes.key.enc; echo; echo "===PAYLOAD==="; base64 -w0 payload.enc; echo; echo "===END==="

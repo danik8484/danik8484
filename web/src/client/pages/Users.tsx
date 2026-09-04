@@ -10,6 +10,18 @@ export default function Users() {
   const [users, setUsers] = useState<PublicUser[] | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<PublicUser | "new" | null>(null);
+  const [link, setLink] = useState<{ user: PublicUser; url: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function makeLink(u: PublicUser) {
+    try {
+      const res = await api.loginLink(u.id);
+      setLink({ user: u, url: res.url });
+      setCopied(false);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -28,7 +40,7 @@ export default function Users() {
         <h1 className="text-lg font-bold text-ink-900">משתמשים</h1>
         <Button onClick={() => setEditing("new")}>+ משתמש</Button>
       </div>
-      <p className="mb-3 text-sm text-slate-600">כל עובד נכנס עם קוד שנשלח למייל שמוגדר כאן. עובד בלי מייל לא יכול להיכנס.</p>
+      <p className="mb-3 text-sm text-slate-600">כל עובד נכנס עם קוד שנשלח למייל שמוגדר כאן, או עם קישור כניסה חד-פעמי שאתה שולח לו (למשל בוואטסאפ).</p>
       <ErrorText>{error}</ErrorText>
       {users === null ? (
         <Spinner />
@@ -46,13 +58,52 @@ export default function Users() {
                 </div>
                 {u.managerId && <div className="text-xs text-slate-500">מנהל: {s.nameOf(u.managerId)}</div>}
               </div>
-              <Button variant="secondary" onClick={() => setEditing(u)}>
-                עריכה
-              </Button>
+              <div className="flex shrink-0 gap-1">
+                {u.active && (
+                  <Button variant="ghost" className="px-2" onClick={() => makeLink(u)} title="קישור כניסה חד-פעמי">
+                    קישור כניסה
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={() => setEditing(u)}>
+                  עריכה
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+      <Modal open={link !== null} onClose={() => setLink(null)} title="קישור כניסה">
+        {link && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              קישור כניסה חד-פעמי עבור <b>{link.user.name}</b>. תקף לשבוע. מי שפותח אותו נכנס למערכת בלי קוד למייל, ונשאר מחובר במכשיר הזה 60 יום.
+            </p>
+            <textarea readOnly dir="ltr" className={`${inputCls} text-xs`} rows={3} value={link.url} onFocus={(e) => e.target.select()} data-testid="login-link" />
+            <div className="flex flex-wrap justify-end gap-2">
+              <a
+                className="inline-flex items-center rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white"
+                href={`https://wa.me/?text=${encodeURIComponent(`היי ${link.user.name}, זה הקישור שלך לכניסה למערכת הלו"ז: ${link.url}`)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                שליחה בוואטסאפ
+              </a>
+              <Button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(link.url);
+                    setCopied(true);
+                  } catch {
+                    setCopied(false);
+                  }
+                }}
+              >
+                {copied ? "הועתק ✓" : "העתקה"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing === "new" ? "משתמש חדש" : "עריכת משתמש"}>
         {editing !== null && users && (
           <UserForm

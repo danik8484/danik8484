@@ -24,6 +24,8 @@ export const api = {
   requestCode: (email: string) => request<{ ok: true; devCode?: string }>("POST", "/api/auth/request-code", { email }),
   verifyCode: (email: string, code: string) => request<{ ok: true }>("POST", "/api/auth/verify", { email, code }),
   logout: () => request<{ ok: true }>("POST", "/api/auth/logout"),
+  loginWithLink: (token: string) => request<{ ok: true }>("POST", "/api/auth/link", { token }),
+  loginLink: (userId: number) => request<{ ok: true; url: string; expiresAt: number }>("POST", `/api/users/${userId}/login-link`),
   me: () => request<MeResponse>("GET", "/api/me"),
   board: (date: string) => request<BoardResponse>("GET", `/api/tasks/board?date=${date}`),
   task: (id: number) => request<TaskDetailResponse>("GET", `/api/tasks/${id}`),

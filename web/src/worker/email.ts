@@ -1,5 +1,7 @@
 import type { Env } from "./env";
 
+export class EmailNotConfigured extends Error {}
+
 export async function sendLoginCode(env: Env, to: string, code: string): Promise<void> {
   const subject = `${env.APP_NAME} – קוד כניסה: ${code}`;
   const text = `קוד הכניסה שלך למערכת ${env.APP_NAME} הוא: ${code}\n\nהקוד תקף ל-10 דקות. אם לא ביקשת קוד, התעלם מהודעה זו.`;
@@ -14,7 +16,7 @@ export async function sendLoginCode(env: Env, to: string, code: string): Promise
       console.log(`[dev] login code for ${to}: ${code}`);
       return;
     }
-    throw new Error("Email is not configured (BREVO_API_KEY / MAIL_FROM missing)");
+    throw new EmailNotConfigured("email not configured");
   }
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
