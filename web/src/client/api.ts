@@ -1,4 +1,4 @@
-import type { Attachment, BoardResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskStatus } from "@shared/types";
+import type { Attachment, BoardResponse, Deal, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskStatus } from "@shared/types";
 
 export class ApiError extends Error {
   status: number;
@@ -16,6 +16,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     credentials: "same-origin",
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string } & T;
+  if (res.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event("session-expired"));
   if (!res.ok) throw new ApiError(res.status, data.error || "שגיאה לא צפויה");
   return data as T;
 }
@@ -33,7 +34,7 @@ export const api = {
     request<{ ok: true; task?: Task; recurringId?: number }>("POST", "/api/tasks", input),
   updateTask: (id: number, input: { title?: string; details?: string; dueDate?: string; assigneeId?: number }) =>
     request<{ ok: true; task: Task }>("PATCH", `/api/tasks/${id}`, input),
-  setStatus: (id: number, status: TaskStatus, note: string, metrics?: { metricDeals?: number | null; metricCalls?: number | null }) =>
+  setStatus: (id: number, status: TaskStatus, note: string, metrics?: { deals?: Deal[]; metricCalls?: number | null }) =>
     request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/status`, { status, note, ...(metrics ?? {}) }),
   deleteTask: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/tasks/${id}`, { reason }),
   uploadPhoto: async (taskId: number, blob: Blob, name: string, width: number, height: number) => {
@@ -51,6 +52,9 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, data.error || "העלאה נכשלה");
     return data.attachment as Attachment;
   },
+  uploadThumb: async (photoId: number, blob: Blob) => {
+    await fetch(`/api/photos/${photoId}/thumb`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob, credentials: "same-origin" }).catch(() => undefined);
+  },
   deletePhoto: (id: number) => request<{ ok: true }>("DELETE", `/api/photos/${id}`),
   pushConfig: () => request<{ publicKey: string; devices: number }>("GET", "/api/push/config"),
   pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => request<{ ok: true }>("POST", "/api/push/subscribe", sub),
@@ -62,8 +66,8 @@ export const api = {
     request<{ ok: true; recurring: RecurringTask }>("PATCH", `/api/recurring/${id}`, input),
   deleteRecurring: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/recurring/${id}`, { reason }),
   users: () => request<{ users: PublicUser[] }>("GET", "/api/users"),
-  createUser: (input: { name: string; email: string | null; role: string; managerId: number | null }) =>
+  createUser: (input: { name: string; email: string | null; phone: string | null; role: string; managerId: number | null }) =>
     request<{ ok: true; user: PublicUser }>("POST", "/api/users", input),
-  updateUser: (id: number, input: Partial<{ name: string; email: string | null; role: string; managerId: number | null; active: boolean; sortOrder: number }>) =>
+  updateUser: (id: number, input: Partial<{ name: string; email: string | null; phone: string | null; role: string; managerId: number | null; active: boolean; sortOrder: number }>) =>
     request<{ ok: true; user: PublicUser }>("PATCH", `/api/users/${id}`, input),
 };

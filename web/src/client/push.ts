@@ -3,7 +3,8 @@ import { api } from "./api";
 export type PushState = "unsupported" | "needs-homescreen" | "denied" | "off" | "on";
 
 function isIos(): boolean {
-  return /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const ua = navigator.userAgent;
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 }
 function isStandalone(): boolean {
   return window.matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone === true;
@@ -45,8 +46,27 @@ export async function enablePush(): Promise<PushState> {
   const { publicKey } = await api.pushConfig();
   const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource });
   const json = sub.toJSON();
-  await api.pushSubscribe({ endpoint: sub.endpoint, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } });
+  try {
+    await api.pushSubscribe({ endpoint: sub.endpoint, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } });
+  } catch (e) {
+    await sub.unsubscribe().catch(() => undefined);
+    throw e;
+  }
   return "on";
+}
+
+/** After sign-in, make sure the device's existing subscription is registered to the current user. */
+export async function resyncPush(): Promise<void> {
+  try {
+    if (!pushSupported()) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (!sub) return;
+    const json = sub.toJSON();
+    await api.pushSubscribe({ endpoint: sub.endpoint, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } });
+  } catch {
+    /* best effort */
+  }
 }
 
 export async function disablePush(): Promise<PushState> {

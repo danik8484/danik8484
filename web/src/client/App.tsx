@@ -10,9 +10,11 @@ import Recurring from "./pages/Recurring";
 import Log from "./pages/Log";
 import Users from "./pages/Users";
 import { PushToggle } from "./components/PushSettings";
+import { disablePush, resyncPush } from "./push";
 
 export default function App() {
   const [me, setMe] = useState<MeResponse | null | undefined>(undefined);
+  const [linkError, setLinkError] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -24,8 +26,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    refresh().catch(() => setMe(null));
+    // A one-time login link works whether or not someone is already signed in on this device.
+    const token = new URLSearchParams(window.location.search).get("t");
+    const start = token
+      ? api
+          .loginWithLink(token)
+          .catch((e) => setLinkError((e as Error).message))
+          .finally(() => window.history.replaceState({}, "", "/"))
+      : Promise.resolve();
+    start.then(() => refresh().catch(() => setMe(null)));
+    const onExpired = () => refresh().catch(() => setMe(null));
+    window.addEventListener("session-expired", onExpired);
+    return () => window.removeEventListener("session-expired", onExpired);
   }, [refresh]);
+
+  useEffect(() => {
+    if (me) resyncPush();
+  }, [me?.user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const session = useMemo<Session | null>(() => {
     if (!me) return null;
@@ -34,6 +51,7 @@ export default function App() {
       ...me,
       refresh,
       logout: async () => {
+        await disablePush().catch(() => undefined);
         await api.logout();
         setMe(null);
       },
@@ -44,7 +62,7 @@ export default function App() {
   }, [me, refresh]);
 
   if (me === undefined) return <Spinner />;
-  if (!session) return <Login onLoggedIn={refresh} />;
+  if (!session) return <Login onLoggedIn={refresh} initialError={linkError} />;
 
   return (
     <SessionContext.Provider value={session}>
@@ -82,7 +100,7 @@ function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: (
           { to: "/", label: "לו\"ז" },
           { to: "/recurring", label: "משימות קבועות" },
           ...(session.user.role !== "employee" ? [{ to: "/log", label: "יומן פעילות" }] : []),
-          ...(session.user.role === "admin" ? [{ to: "/users", label: "משתמשים" }] : []),
+          ...(session.user.role === "admin" ? [{ to: "/users", label: "אנשי צוות" }] : []),
         ];
         const linkCls = ({ isActive }: { isActive: boolean }) =>
           `rounded-lg px-3 py-2 text-sm font-semibold transition ${isActive ? "bg-white/15 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`;

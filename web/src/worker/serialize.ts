@@ -1,11 +1,25 @@
-import type { PublicUser, Task, TaskEvent, RecurringTask, TaskStatus, EventType, Attachment } from "@shared/types";
+import type { PublicUser, Task, TaskEvent, RecurringTask, TaskStatus, EventType, Attachment, Deal } from "@shared/types";
 import type { UserRow, TaskRow, TaskEventRow, RecurringRow, AttachmentRow } from "./db/schema";
+
+export function parseDeals(json: string | null): Deal[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((d) => d && typeof d.name === "string")
+      .map((d) => ({ name: String(d.name), amount: typeof d.amount === "number" && Number.isFinite(d.amount) ? d.amount : null }));
+  } catch {
+    return [];
+  }
+}
 
 export function toPublicUser(u: UserRow, includeEmail: boolean): PublicUser {
   return {
     id: u.id,
     name: u.name,
     email: includeEmail ? u.email : null,
+    phone: includeEmail ? u.phone : null,
     role: u.role,
     managerId: u.managerId,
     sortOrder: u.sortOrder,
@@ -30,6 +44,7 @@ export function toTask(t: TaskRow): Task {
     kind: t.kind,
     metricDeals: t.metricDeals,
     metricCalls: t.metricCalls,
+    deals: parseDeals(t.dealsJson),
     createdDate: t.createdDate,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,

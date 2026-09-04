@@ -10,7 +10,12 @@ export async function loadTeam(db: Db): Promise<UserRow[]> {
 }
 
 export function publicTeam(team: UserRow[], viewer: UserRow): PublicUser[] {
-  return team.map((u) => toPublicUser(u, viewer.role === "admin"));
+  const visible = new Set(visibleIdsFor(viewer, team));
+  return team.map((u) => {
+    const pu = toPublicUser(u, viewer.role === "admin");
+    // Teammates outside my view: name, role and active flag only (needed for the cards and name tags)
+    return viewer.role === "admin" || visible.has(u.id) ? pu : { ...pu, managerId: null };
+  });
 }
 
 export function visibleIdsFor(viewer: UserRow, team: UserRow[]): number[] {

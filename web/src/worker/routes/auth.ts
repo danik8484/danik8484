@@ -10,7 +10,7 @@ authRoutes.post("/request-code", async (c) => {
   const email = normalizeEmail(body.email);
   if (!email) return c.json({ error: "כתובת מייל לא תקינה" }, 400);
   const res = await requestCode(c.get("db"), c.env, email);
-  if (!res.ok) return c.json({ error: res.error }, res.status as 429 | 503);
+  if (!res.ok) return c.json({ error: res.error }, res.status as 429);
   return c.json({ ok: true, devCode: res.devCode });
 });
 

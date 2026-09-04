@@ -37,10 +37,10 @@ export default function Users() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-ink-900">משתמשים</h1>
-        <Button onClick={() => setEditing("new")}>+ משתמש</Button>
+        <h1 className="text-lg font-bold text-ink-900">אנשי צוות</h1>
+        <Button onClick={() => setEditing("new")}>+ איש צוות</Button>
       </div>
-      <p className="mb-3 text-sm text-slate-600">כל עובד נכנס עם קוד שנשלח למייל שמוגדר כאן, או עם קישור כניסה חד-פעמי שאתה שולח לו (למשל בוואטסאפ).</p>
+      <p className="mb-3 text-sm text-slate-600">כל איש צוות נכנס עם קישור כניסה חד-פעמי שאתה שולח לו (למשל בוואטסאפ), או עם קוד למייל. מספר הטלפון משמש להתראות בוואטסאפ.</p>
       <ErrorText>{error}</ErrorText>
       {users === null ? (
         <Spinner />
@@ -56,6 +56,7 @@ export default function Users() {
                 <div className="truncate text-xs text-slate-500" dir="ltr">
                   {u.email ?? <span className="text-amber-700" dir="rtl">לא הוגדר מייל</span>}
                 </div>
+                {u.phone && <div className="text-xs text-slate-500" dir="ltr">+{u.phone}</div>}
                 {u.managerId && <div className="text-xs text-slate-500">מנהל: {s.nameOf(u.managerId)}</div>}
               </div>
               <div className="flex shrink-0 gap-1">
@@ -104,7 +105,7 @@ export default function Users() {
           </div>
         )}
       </Modal>
-      <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing === "new" ? "משתמש חדש" : "עריכת משתמש"}>
+      <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing === "new" ? "איש צוות חדש" : "עריכת איש צוות"}>
         {editing !== null && users && (
           <UserForm
             user={editing === "new" ? null : editing}
@@ -126,9 +127,11 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
   const s = useSession();
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [phone, setPhone] = useState(user?.phone ? "+" + user.phone : "");
   const [role, setRole] = useState<Role>(user?.role ?? "employee");
   const [managerId, setManagerId] = useState<number | "">(user?.managerId ?? "");
   const [active, setActive] = useState(user?.active ?? true);
+  void s;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const managers = all.filter((u) => u.active && u.role !== "employee" && u.id !== user?.id);
@@ -139,7 +142,7 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
     setBusy(true);
     setError("");
     try {
-      const payload = { name, email: email.trim() ? email.trim() : null, role, managerId: role === "admin" || managerId === "" ? null : Number(managerId) };
+      const payload = { name, email: email.trim() ? email.trim() : null, phone: phone.trim() ? phone.trim() : null, role, managerId: role === "admin" || managerId === "" ? null : Number(managerId) };
       if (user) await api.updateUser(user.id, { ...payload, active });
       else await api.createUser(payload);
       onSaved();
@@ -155,13 +158,16 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
       <Field label="שם">
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} />
       </Field>
-      <Field label="מייל לכניסה" hint="הקוד לכניסה נשלח לכתובת הזו">
+      <Field label="טלפון נייד" hint="להתראות בוואטסאפ. למשל 053-832-2343">
+        <input type="tel" dir="ltr" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </Field>
+      <Field label="מייל">
         <input type="email" dir="ltr" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="תפקיד">
           <select className={inputCls} value={role} onChange={(e) => setRole(e.target.value as Role)} disabled={isSelf}>
-            <option value="employee">עובד</option>
+            <option value="employee">איש צוות</option>
             <option value="manager">מנהל</option>
             <option value="admin">מנהל ראשי</option>
           </select>
@@ -180,12 +186,12 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
         )}
       </div>
       <p className="text-xs text-slate-500">
-        מנהל ראשי רואה את כולם. מנהל רואה את עצמו ואת העובדים שהוא המנהל הישיר שלהם. עובד רואה רק את עצמו.
+        מנהל ראשי רואה את כולם. מנהל רואה את עצמו ואת אנשי הצוות שהוא המנהל הישיר שלהם. איש צוות רואה רק את עצמו.
       </p>
       {user && !isSelf && (
         <label className="flex items-center gap-2 text-sm font-semibold text-ink-700">
           <input type="checkbox" className="size-4 accent-brand-600" checked={active} onChange={(e) => setActive(e.target.checked)} />
-          משתמש פעיל (משתמש מושבת לא יכול להיכנס)
+          פעיל (איש צוות מושבת לא יכול להיכנס)
         </label>
       )}
       <ErrorText>{error}</ErrorText>

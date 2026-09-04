@@ -3,6 +3,7 @@ import m0002 from "../../migrations/0002_meta.sql";
 import m0003 from "../../migrations/0003_login_links.sql";
 import m0004 from "../../migrations/0004_attachments.sql";
 import m0005 from "../../migrations/0005_notifications.sql";
+import m0006 from "../../migrations/0006_phones_deals.sql";
 import type { Env } from "./env";
 
 /**
@@ -15,6 +16,7 @@ const MIGRATIONS: [string, string][] = [
   ["0003_login_links.sql", m0003],
   ["0004_attachments.sql", m0004],
   ["0005_notifications.sql", m0005],
+  ["0006_phones_deals.sql", m0006],
 ];
 
 let ready: Promise<void> | null = null;
@@ -29,14 +31,31 @@ export function ensureSchema(env: Env): Promise<void> {
   return ready;
 }
 
+/** Split on ';' outside single-quoted strings; drop '--' comments outside strings. */
 function splitStatements(sql: string): string[] {
-  return sql
-    .split("\n")
-    .map((line) => line.replace(/--.*$/, ""))
-    .join("\n")
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const out: string[] = [];
+  let cur = "";
+  let inStr = false;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (inStr) {
+      cur += ch;
+      if (ch === "'") inStr = false;
+      continue;
+    }
+    if (ch === "'") {
+      inStr = true;
+      cur += ch;
+    } else if (ch === "-" && sql[i + 1] === "-") {
+      while (i < sql.length && sql[i] !== "\n") i++;
+      cur += "\n";
+    } else if (ch === ";") {
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
 }
 
 async function runMigrations(env: Env): Promise<void> {

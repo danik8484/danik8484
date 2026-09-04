@@ -1,26 +1,14 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { api } from "../api";
 import { Button, ErrorText, Field, inputCls } from "../components/ui";
 
-export default function Login({ onLoggedIn }: { onLoggedIn: () => Promise<void> }) {
+export default function Login({ onLoggedIn, initialError = "" }: { onLoggedIn: () => Promise<void>; initialError?: string }) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const [devCode, setDevCode] = useState<string | undefined>();
-  const [linkBusy, setLinkBusy] = useState(() => new URLSearchParams(window.location.search).has("t"));
-
-  useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("t");
-    if (!token) return;
-    window.history.replaceState({}, "", "/");
-    api
-      .loginWithLink(token)
-      .then(() => onLoggedIn())
-      .catch((err) => setError((err as Error).message))
-      .finally(() => setLinkBusy(false));
-  }, [onLoggedIn]);
 
   async function sendCode(e: FormEvent) {
     e.preventDefault();
@@ -62,9 +50,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => Promise<void> 
           </div>
         </div>
 
-        {linkBusy ? (
-          <p className="py-4 text-center text-sm text-slate-600">מתחבר באמצעות הקישור...</p>
-        ) : step === "email" ? (
+        {step === "email" ? (
           <form onSubmit={sendCode} className="space-y-4">
             <Field label="כתובת מייל">
               <input

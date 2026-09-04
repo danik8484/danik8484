@@ -55,7 +55,7 @@ export default function Log() {
           <input type="date" className={`${inputCls} mt-1`} value={to} min={from} onChange={(e) => setTo(e.target.value)} />
         </label>
         <label className="col-span-2 text-xs font-semibold text-slate-600 sm:col-span-1">
-          עובד
+          איש צוות
           <select className={`${inputCls} mt-1`} value={who} onChange={(e) => setWho(e.target.value === "all" ? "all" : Number(e.target.value))}>
             <option value="all">כולם</option>
             {visible.map((u) => (

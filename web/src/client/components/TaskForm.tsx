@@ -57,11 +57,11 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
       <Field label="משימה">
         <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} autoFocus placeholder="למשל: להתקשר ל-5 לידים חדשים" />
       </Field>
-      <Field label="פירוט (לא חובה)">
+      <Field label="פירוט">
         <textarea className={inputCls} rows={3} value={details} onChange={(e) => setDetails(e.target.value)} maxLength={3000} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="עובד">
+        <Field label="איש צוות">
           <select className={inputCls} value={assigneeId} onChange={(e) => setAssigneeId(Number(e.target.value))}>
             {managed.map((u) => (
               <option key={u.id} value={u.id}>
@@ -69,7 +69,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
               </option>
             ))}
             {others.length > 0 && !recurring && (
-              <optgroup label="בקשה לעובד אחר">
+              <optgroup label="בקשה לאיש צוות אחר">
                 {others.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -101,7 +101,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
             />
             משימה קבועה (חוזרת כל שבוע)
           </label>
-          {!s.canSee(assigneeId) && <p className="mt-1 text-xs text-slate-500">משימה קבועה אפשר להגדיר רק לעצמך או לעובדים שאתה מנהל.</p>}
+          {!s.canSee(assigneeId) && <p className="mt-1 text-xs text-slate-500">משימה קבועה אפשר להגדיר רק לעצמך או לאנשי צוות שאתה מנהל.</p>}
           {recurring && (
             <label className="mt-3 flex items-center gap-2 text-sm text-ink-700">
               <input type="checkbox" className="size-4 accent-brand-600" checked={leads} onChange={(e) => setLeads(e.target.checked)} />

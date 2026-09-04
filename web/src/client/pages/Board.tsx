@@ -29,10 +29,12 @@ export default function Board() {
       setUpcoming(res.upcoming);
       setSent(res.sent);
       setError("");
+      // The phone may stay open past midnight: follow the server's "today".
+      if (res.today !== s.today) s.refresh().catch(() => undefined);
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [date]);
+  }, [date, s]);
 
   useEffect(() => {
     setTasks(null);
@@ -55,14 +57,6 @@ export default function Board() {
 
   const setDate = (d: string) => setParams(d === s.today ? {} : { date: d });
 
-  const orderedUsers = useMemo(() => {
-    const active = s.users.filter((u) => u.active);
-    const mine = active.filter((u) => u.id === s.user.id);
-    const visible = active.filter((u) => u.id !== s.user.id && s.canSee(u.id));
-    const hidden = active.filter((u) => !s.canSee(u.id));
-    return [...mine, ...visible, ...hidden];
-  }, [s]);
-
   // When looking at a past day, show each task as it was on that day:
   // a task completed later is still "open" on that day's view.
   const asOf = useMemo(() => (tasks ?? []).map((t) => (t.status === "done" && t.completedDate && t.completedDate > date ? { ...t, status: "open" as const } : t)), [tasks, date]);
@@ -75,6 +69,15 @@ export default function Board() {
     }
     return m;
   }, [asOf]);
+
+  const orderedUsers = useMemo(() => {
+    // Deactivated teammates keep a card only while they still have tasks on this day, so nothing gets lost.
+    const shown = s.users.filter((u) => u.active || (byUser.get(u.id)?.length ?? 0) > 0);
+    const mine = shown.filter((u) => u.id === s.user.id);
+    const visible = shown.filter((u) => u.id !== s.user.id && s.canSee(u.id));
+    const hidden = shown.filter((u) => !s.canSee(u.id));
+    return [...mine, ...visible, ...hidden];
+  }, [s, byUser]);
 
   const summary = useMemo(() => {
     const done = asOf.filter((t) => t.status === "done").length;
@@ -150,7 +153,7 @@ export default function Board() {
       {sent.length > 0 && (
         <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm" data-testid="sent">
           <h2 className="text-sm font-bold text-ink-800">משימות ששלחתי לאחרים ({sent.length})</h2>
-          <p className="mb-1 text-xs text-slate-500">בקשות שהוספת לעובדים שהלו"ז שלהם לא חשוף לך. רואים רק את הסטטוס של הבקשה עצמה.</p>
+          <p className="mb-1 text-xs text-slate-500">בקשות שהוספת לאנשי צוות שהלו"ז שלהם לא חשוף לך. רואים רק את הסטטוס של הבקשה עצמה.</p>
           <ul className="divide-y divide-slate-100">
             {sent.map((t) => (
               <li key={t.id}>
@@ -262,7 +265,10 @@ function UserCard({
               {user.name}
               {isMe && <span className="ms-1 text-xs font-normal text-slate-500">(אני)</span>}
             </div>
-            <div className="text-xs text-slate-500">{ROLE_LABEL[user.role]}</div>
+            <div className="text-xs text-slate-500">
+              {ROLE_LABEL[user.role]}
+              {!user.active && <span className="ms-1 font-semibold text-red-600">· מושבת</span>}
+            </div>
           </div>
         </div>
         {visible ? (
@@ -328,7 +334,7 @@ function UserCard({
           {fromPeers.length > 0 && (
             <>
               <div className="mx-3 mt-1 border-t border-dashed border-violet-200" />
-              <GroupHeader className="text-violet-700">בקשות מעובדים אחרים</GroupHeader>
+              <GroupHeader className="text-violet-700">בקשות מאנשי צוות אחרים</GroupHeader>
               <ul data-testid={`group-peers-${user.id}`}>
                 {fromPeers.map((t) => (
                   <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />

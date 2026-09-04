@@ -4,6 +4,7 @@ import type { AppEnv } from "../context";
 import { pushSubscriptions, notificationQueue } from "../db/schema";
 import { getVapid, pushToUser } from "../push";
 import { readJson, str } from "../validate";
+import { getCookie } from "hono/cookie";
 import { isNull, sql } from "drizzle-orm";
 
 export const pushRoutes = new Hono<AppEnv>();
@@ -29,10 +30,12 @@ pushRoutes.post("/subscribe", async (c) => {
   const auth = str(keys.auth, 100);
   if (!endpoint || !endpoint.startsWith("https://") || !p256dh || !auth) return c.json({ error: "מנוי התראות לא תקין" }, 400);
   const ua = (c.req.header("user-agent") || "").slice(0, 200);
+  const sessionId = getCookie(c, "sid") ?? null;
+  // A browser endpoint belongs to whoever is signed in on that device now (shared phones/tablets).
   await db
     .insert(pushSubscriptions)
-    .values({ userId: me.id, endpoint, p256dh, auth, userAgent: ua })
-    .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { userId: me.id, p256dh, auth, userAgent: ua, failures: 0, lastError: null } })
+    .values({ userId: me.id, endpoint, p256dh, auth, userAgent: ua, sessionId })
+    .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { userId: me.id, p256dh, auth, userAgent: ua, sessionId, failures: 0, lastError: null } })
     .run();
   return c.json({ ok: true });
 });

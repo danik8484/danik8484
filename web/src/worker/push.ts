@@ -28,10 +28,9 @@ let cached: Vapid | null = null;
 
 export async function getVapid(db: Db): Promise<Vapid> {
   if (cached) return cached;
-  const pub = await db.select().from(appMeta).where(eq(appMeta.key, "vapid_public")).get();
-  const priv = await db.select().from(appMeta).where(eq(appMeta.key, "vapid_private")).get();
-  if (pub && priv) {
-    cached = { publicKey: pub.value, privateKey: priv.value };
+  const row = await db.select().from(appMeta).where(eq(appMeta.key, "vapid_keys")).get();
+  if (row) {
+    cached = JSON.parse(row.value) as Vapid;
     return cached;
   }
   const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
@@ -44,12 +43,10 @@ export async function getVapid(db: Db): Promise<Vapid> {
   raw.set(x, 1);
   raw.set(y, 33);
   const keys: Vapid = { publicKey: b64url(raw), privateKey: jwkPriv.d! };
-  await db.insert(appMeta).values({ key: "vapid_public", value: keys.publicKey }).onConflictDoNothing().run();
-  await db.insert(appMeta).values({ key: "vapid_private", value: keys.privateKey }).onConflictDoNothing().run();
-  // Re-read in case another isolate won the race
-  const pub2 = await db.select().from(appMeta).where(eq(appMeta.key, "vapid_public")).get();
-  const priv2 = await db.select().from(appMeta).where(eq(appMeta.key, "vapid_private")).get();
-  cached = { publicKey: pub2!.value, privateKey: priv2!.value };
+  // Both halves are written atomically as one value, so two isolates can never mix key pairs.
+  await db.insert(appMeta).values({ key: "vapid_keys", value: JSON.stringify(keys) }).onConflictDoNothing().run();
+  const stored = await db.select().from(appMeta).where(eq(appMeta.key, "vapid_keys")).get();
+  cached = JSON.parse(stored!.value) as Vapid;
   return cached;
 }
 

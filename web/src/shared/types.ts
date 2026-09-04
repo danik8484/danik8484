@@ -1,12 +1,19 @@
 export type Role = "admin" | "manager" | "employee";
 export type TaskStatus = "open" | "in_progress" | "done";
 export type TaskKind = "normal" | "leads";
+
+/** A closed deal recorded on a leads task. */
+export interface Deal {
+  name: string;
+  amount: number | null;
+}
 export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed";
 
 export interface PublicUser {
   id: number;
   name: string;
   email: string | null;
+  phone: string | null;
   role: Role;
   managerId: number | null;
   sortOrder: number;
@@ -29,6 +36,7 @@ export interface Task {
   kind: TaskKind;
   metricDeals: number | null;
   metricCalls: number | null;
+  deals: Deal[]; // TODO(DND CASH): connect closed deals to the DND CASH system
   createdDate: string;
   createdAt: string;
   updatedAt: string;
@@ -83,6 +91,7 @@ export interface MeResponse {
 
 export interface BoardResponse {
   date: string;
+  today: string;
   tasks: Task[]; // only tasks of visible users
   upcoming: Task[]; // future tasks of visible users
   sent: Task[]; // tasks I created for teammates whose schedule I cannot see

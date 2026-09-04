@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import type { AppEnv } from "../context";
-import { users, sessions } from "../db/schema";
+import { users, sessions, pushSubscriptions, notificationQueue } from "../db/schema";
+import { and, isNull } from "drizzle-orm";
+import { materializeRecurring } from "../recurring";
+import { localDate } from "../dates";
 import { toPublicUser } from "../serialize";
 import { createLoginLink, normalizeEmail } from "../auth";
-import { int, readJson, str } from "../validate";
+import { int, phone as parsePhone, readJson, str } from "../validate";
 import type { Role } from "@shared/types";
 
 export const userRoutes = new Hono<AppEnv>();
@@ -12,7 +15,7 @@ export const userRoutes = new Hono<AppEnv>();
 const ROLES: Role[] = ["admin", "manager", "employee"];
 
 userRoutes.use("*", async (c, next) => {
-  if (c.get("user").role !== "admin") return c.json({ error: "רק מנהל ראשי יכול לנהל משתמשים" }, 403);
+  if (c.get("user").role !== "admin") return c.json({ error: "רק מנהל ראשי יכול לנהל אנשי צוות" }, 403);
   await next();
 });
 
@@ -23,7 +26,7 @@ userRoutes.get("/", async (c) => {
 function validateManager(role: Role, managerId: number | null, team: { id: number; role: string; active: number }[], selfId: number | null): string | null {
   if (role === "admin") return null;
   if (managerId === null) return "חובה לבחור מנהל";
-  if (managerId === selfId) return "עובד לא יכול להיות מנהל של עצמו";
+  if (managerId === selfId) return "איש צוות לא יכול להיות מנהל של עצמו";
   const m = team.find((u) => u.id === managerId);
   if (!m || m.active !== 1) return "מנהל לא תקין";
   if (m.role === "employee") return "מנהל חייב להיות בתפקיד מנהל או מנהל ראשי";
@@ -38,6 +41,8 @@ userRoutes.post("/", async (c) => {
   const role = body.role as Role;
   const managerId = body.managerId === null || body.managerId === undefined || body.managerId === "" ? null : int(body.managerId);
   const email = body.email ? normalizeEmail(body.email) : null;
+  const phone = parsePhone(body.phone);
+  if (phone === undefined && body.phone !== undefined) return c.json({ error: "מספר טלפון לא תקין" }, 400);
   if (!name) return c.json({ error: "חובה להזין שם" }, 400);
   if (!ROLES.includes(role)) return c.json({ error: "תפקיד לא תקין" }, 400);
   if (body.email && !email) return c.json({ error: "כתובת מייל לא תקינה" }, 400);
@@ -47,7 +52,7 @@ userRoutes.post("/", async (c) => {
   const maxSort = Math.max(0, ...team.map((u) => u.sortOrder));
   const row = await db
     .insert(users)
-    .values({ name, email, role, managerId: role === "admin" ? null : managerId, sortOrder: maxSort + 1 })
+    .values({ name, email, phone: phone ?? null, role, managerId: role === "admin" ? null : managerId, sortOrder: maxSort + 1 })
     .returning()
     .get();
   return c.json({ ok: true, user: toPublicUser(row, true) }, 201);
@@ -78,6 +83,11 @@ userRoutes.patch("/:id", async (c) => {
       patch.email = email;
     }
   }
+  if (body.phone !== undefined) {
+    const phone = parsePhone(body.phone);
+    if (phone === undefined) return c.json({ error: "מספר טלפון לא תקין" }, 400);
+    patch.phone = phone;
+  }
   const role = (body.role !== undefined ? body.role : row.role) as Role;
   if (!ROLES.includes(role)) return c.json({ error: "תפקיד לא תקין" }, 400);
   if (id === me.id && role !== "admin") return c.json({ error: "לא ניתן לשנות את התפקיד של עצמך" }, 400);
@@ -90,7 +100,7 @@ userRoutes.patch("/:id", async (c) => {
   patch.managerId = role === "admin" ? null : managerId;
   const reports = team.filter((u) => u.managerId === id && u.active === 1 && u.id !== id);
   if (role === "employee" && reports.length > 0) {
-    return c.json({ error: `לא ניתן להפוך לעובד: ${reports.map((u) => u.name).join(", ")} עדיין תחת ניהולו. קודם העבר אותם למנהל אחר.` }, 400);
+    return c.json({ error: `לא ניתן להפוך לאיש צוות: ${reports.map((u) => u.name).join(", ")} עדיין תחת ניהולו. קודם העבר אותם למנהל אחר.` }, 400);
   }
   if (body.active !== undefined) {
     if (id === me.id && !body.active) return c.json({ error: "לא ניתן להשבית את עצמך" }, 400);
@@ -104,7 +114,12 @@ userRoutes.patch("/:id", async (c) => {
     if (so !== null) patch.sortOrder = so;
   }
   await db.update(users).set(patch).where(eq(users.id, id)).run();
-  if (patch.active === 0) await db.delete(sessions).where(eq(sessions.userId, id)).run();
+  if (patch.active === 0) {
+    await db.delete(sessions).where(eq(sessions.userId, id)).run();
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, id)).run();
+    await db.delete(notificationQueue).where(and(eq(notificationQueue.userId, id), isNull(notificationQueue.sentAt))).run();
+  }
+  if (patch.active === 1 && row.active === 0) await materializeRecurring(db, localDate(c.env.TIMEZONE), true);
   const updated = await db.select().from(users).where(eq(users.id, id)).get();
   return c.json({ ok: true, user: toPublicUser(updated!, true) });
 });

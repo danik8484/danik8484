@@ -12,6 +12,9 @@ import { userRoutes } from "./routes/users";
 import { photoRoutes } from "./routes/photos";
 import { pushRoutes } from "./routes/push";
 import { flushDigests, sendDayEndReminders } from "./notify";
+import { BadRequest } from "./validate";
+import { appMeta } from "./db/schema";
+import { eq, sql } from "drizzle-orm";
 import type { MeResponse } from "@shared/types";
 import type { Env } from "./env";
 import { materializeRecurring } from "./recurring";
@@ -23,10 +26,26 @@ app.use("/api/*", async (c, next) => {
   await ensureSchema(c.env);
   c.set("db", getDb(c.env.DB));
   c.header("Cache-Control", "no-store");
+  c.executionCtx.waitUntil(runScheduledIfDue(c.env).catch((e) => console.error("background work failed", e)));
   await next();
 });
 
+/** Without a cron trigger (e.g. temporary accounts) the background work still runs at most every 5 minutes, piggybacking on requests. */
+async function runScheduledIfDue(env: Env): Promise<void> {
+  const db = getDb(env.DB);
+  const now = Date.now();
+  const claimed = await db
+    .insert(appMeta)
+    .values({ key: "last_background_run", value: String(now) })
+    .onConflictDoUpdate({ target: appMeta.key, set: { value: sql`excluded.value` }, where: sql`CAST(${appMeta.value} AS INTEGER) < ${now - 5 * 60 * 1000}` })
+    .returning({ value: appMeta.value })
+    .get();
+  if (!claimed) return;
+  await runScheduled(env);
+}
+
 app.onError((err, c) => {
+  if (err instanceof BadRequest) return c.json({ error: "בקשה לא תקינה" }, 415);
   console.error(err);
   return c.json({ error: "שגיאה בשרת. נסה שוב." }, 500);
 });

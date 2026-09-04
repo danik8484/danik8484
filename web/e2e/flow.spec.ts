@@ -49,8 +49,8 @@ test.describe.serial("daily schedule flow", () => {
     // Task for Uri Shapira
     await page.getByTestId("card-3").getByRole("button", { name: /הוספת משימה/ }).click();
     await page.getByLabel("משימה", { exact: true }).fill(T.daniForUriS);
-    await page.getByLabel("פירוט (לא חובה)").fill("לחזור לכל הלידים מאתמול");
-    await expect(page.getByLabel("עובד")).toHaveValue("3");
+    await page.getByLabel("פירוט").fill("לחזור לכל הלידים מאתמול");
+    await expect(page.getByLabel("איש צוות")).toHaveValue("3");
     await page.getByRole("button", { name: "הוספה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.daniForUriS)).toBeVisible();
     await expect(page.getByTestId("card-3").getByText("(דני ש.)").first()).toBeVisible();
@@ -117,9 +117,9 @@ test.describe.serial("daily schedule flow", () => {
 
     await page.getByRole("button", { name: "הוספת משימה", exact: true }).click();
     // Only himself as a managed assignee; everyone else is offered under "request from another teammate"
-    await expect(page.getByLabel("עובד").locator("option")).toHaveCount(5);
-    await expect(page.getByLabel("עובד").locator("optgroup option")).toHaveCount(4);
-    await expect(page.getByLabel("עובד")).toHaveValue("3");
+    await expect(page.getByLabel("איש צוות").locator("option")).toHaveCount(5);
+    await expect(page.getByLabel("איש צוות").locator("optgroup option")).toHaveCount(4);
+    await expect(page.getByLabel("איש צוות")).toHaveValue("3");
     await page.getByLabel("משימה", { exact: true }).fill(T.uriSSelf);
     await page.getByRole("button", { name: "הוספה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.uriSSelf)).toBeVisible();

@@ -5,7 +5,7 @@ import type { Db } from "../db/client";
 import { tasks, taskAttachments, taskEvents } from "../db/schema";
 import { toAttachment, toPublicUser } from "../serialize";
 import { canOpenTask } from "@shared/permissions";
-import { int } from "../validate";
+import { chunk, int } from "../validate";
 import { nowIso } from "../dates";
 
 const MAX_BYTES = 2_500_000; // images are resized on the phone before upload; this is a hard cap
@@ -23,14 +23,15 @@ export async function listAttachments(db: Db, taskId: number) {
 /** Photo counts for a set of task ids (for the board rows). */
 export async function photoCounts(db: Db, taskIds: number[]): Promise<Map<number, number>> {
   const m = new Map<number, number>();
-  if (taskIds.length === 0) return m;
-  const rows = await db
-    .select({ taskId: taskAttachments.taskId, n: sql<number>`count(*)` })
-    .from(taskAttachments)
-    .where(and(inArray(taskAttachments.taskId, taskIds), isNull(taskAttachments.deletedAt)))
-    .groupBy(taskAttachments.taskId)
-    .all();
-  for (const r of rows) m.set(r.taskId, Number(r.n));
+  for (const ids of chunk(taskIds)) {
+    const rows = await db
+      .select({ taskId: taskAttachments.taskId, n: sql<number>`count(*)` })
+      .from(taskAttachments)
+      .where(and(inArray(taskAttachments.taskId, ids), isNull(taskAttachments.deletedAt)))
+      .groupBy(taskAttachments.taskId)
+      .all();
+    for (const r of rows) m.set(r.taskId, Number(r.n));
+  }
   return m;
 }
 
@@ -64,6 +65,7 @@ photoRoutes.post("/tasks/:id/photos", async (c) => {
   const height = int(c.req.header("x-image-height") ?? "");
   const kvKey = `task/${id}/${crypto.randomUUID()}`;
   await c.env.FILES.put(kvKey, bytes, { metadata: { contentType, taskId: id } });
+  // Optional small preview generated on the device (base64 JPEG in a header-sized body is impractical, so it is sent separately)
   const row = await db
     .insert(taskAttachments)
     .values({ taskId: id, uploadedById: me.id, kvKey, fileName: rawName, contentType, size: bytes.byteLength, width, height })
@@ -72,6 +74,22 @@ photoRoutes.post("/tasks/:id/photos", async (c) => {
   await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "photo", note: rawName }).run();
   await db.update(tasks).set({ updatedAt: nowIso() }).where(eq(tasks.id, id)).run();
   return c.json({ ok: true, attachment: toAttachment(row) }, 201);
+});
+
+/** Attach a small preview (JPEG ≤ 150KB) to an existing photo; generated on the device. */
+photoRoutes.post("/photos/:id/thumb", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user");
+  const id = int(c.req.param("id"));
+  if (id === null) return c.json({ error: "לא נמצא" }, 404);
+  const row = await db.select().from(taskAttachments).where(and(eq(taskAttachments.id, id), isNull(taskAttachments.deletedAt))).get();
+  if (!row || row.uploadedById !== me.id) return c.json({ error: "לא נמצא" }, 404);
+  const bytes = await c.req.arrayBuffer();
+  if (bytes.byteLength === 0 || bytes.byteLength > 150_000) return c.json({ error: "תצוגה מקדימה גדולה מדי" }, 413);
+  const thumbKey = `${row.kvKey}/thumb`;
+  await c.env.FILES.put(thumbKey, bytes, { metadata: { contentType: "image/jpeg", taskId: row.taskId } });
+  await db.update(taskAttachments).set({ thumbKey }).where(eq(taskAttachments.id, id)).run();
+  return c.json({ ok: true });
 });
 
 photoRoutes.get("/photos/:id", async (c) => {
@@ -83,11 +101,12 @@ photoRoutes.get("/photos/:id", async (c) => {
   if (!row) return c.json({ error: "לא נמצא" }, 404);
   const task = await db.select().from(tasks).where(eq(tasks.id, row.taskId)).get();
   if (!task || !canOpenTask(toPublicUser(me, false), task, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
-  const body = await c.env.FILES.get(row.kvKey, "stream");
+  const wantThumb = c.req.query("thumb") === "1" && !!row.thumbKey;
+  const body = await c.env.FILES.get(wantThumb ? row.thumbKey! : row.kvKey, "stream");
   if (!body) return c.json({ error: "התמונה עדיין לא זמינה, נסה שוב בעוד רגע" }, 404);
   return new Response(body, {
     headers: {
-      "content-type": row.contentType,
+      "content-type": wantThumb ? "image/jpeg" : row.contentType,
       "cache-control": "private, max-age=86400",
       "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(row.fileName)}`,
     },
@@ -104,6 +123,7 @@ photoRoutes.delete("/photos/:id", async (c) => {
   if (row.uploadedById !== me.id && me.role !== "admin") return c.json({ error: "רק מי שהעלה את התמונה (או המנהל הראשי) יכול למחוק אותה" }, 403);
   await db.update(taskAttachments).set({ deletedAt: nowIso(), deletedById: me.id }).where(eq(taskAttachments.id, id)).run();
   await c.env.FILES.delete(row.kvKey);
+  if (row.thumbKey) await c.env.FILES.delete(row.thumbKey);
   await db.insert(taskEvents).values({ taskId: row.taskId, actorId: me.id, type: "photo_removed", note: row.fileName }).run();
   return c.json({ ok: true });
 });

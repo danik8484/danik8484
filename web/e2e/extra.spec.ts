@@ -30,7 +30,7 @@ function shiftDate(iso: string, days: number) {
 test("admin user management guards", async ({ browser }) => {
   const page = await login(browser, "dani@example.com");
   await page.getByRole("button", { name: "תפריט" }).click();
-  await page.getByRole("link", { name: "משתמשים" }).click();
+  await page.getByRole("link", { name: "אנשי צוות" }).click();
   await expect(page.getByText("ron@example.com")).toBeVisible();
 
   // Ron still manages Uri Shapira → cannot be demoted to employee
@@ -38,16 +38,18 @@ test("admin user management guards", async ({ browser }) => {
   await page.getByLabel("תפקיד").selectOption("employee");
   await page.getByLabel("מנהל ישיר").selectOption("1");
   await page.getByRole("button", { name: "שמירה" }).click();
-  await expect(page.getByText(/לא ניתן להפוך לעובד/)).toBeVisible();
+  await expect(page.getByText(/לא ניתן להפוך לאיש צוות/)).toBeVisible();
   await page.getByRole("button", { name: "ביטול" }).click();
 
   // Changing an email works and is reflected in the list
   await page.locator("li", { hasText: /^דני קגנוביץ/ }).getByRole("button", { name: "עריכה" }).click();
-  await page.getByLabel("מייל לכניסה").fill("dani.k2@example.com");
+  await page.getByLabel("מייל").fill("dani.k2@example.com");
+  await page.getByLabel("טלפון נייד").fill("+972 53-331-3078");
   await page.getByRole("button", { name: "שמירה" }).click();
   await expect(page.getByText("dani.k2@example.com")).toBeVisible();
+  await expect(page.getByText("+972533313078")).toBeVisible();
   await page.locator("li", { hasText: /^דני קגנוביץ/ }).getByRole("button", { name: "עריכה" }).click();
-  await page.getByLabel("מייל לכניסה").fill("dani.k@example.com");
+  await page.getByLabel("מייל").fill("dani.k@example.com");
   await page.getByRole("button", { name: "שמירה" }).click();
   await expect(page.getByText("dani.k@example.com")).toBeVisible();
   await page.context().close();

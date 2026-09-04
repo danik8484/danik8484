@@ -34,7 +34,7 @@ test.describe.serial("teammates can request tasks from each other", () => {
     // Dani's card is blurred but has a request button
     await expect(page.getByTestId("card-1").locator(".blurred")).toHaveCount(1);
     await page.getByTestId("card-1").getByRole("button", { name: /בקשת משימה/ }).click();
-    await expect(page.getByLabel("עובד")).toHaveValue("1");
+    await expect(page.getByLabel("איש צוות")).toHaveValue("1");
     await expect(page.getByText(/תופיע אצל דני שקנבסקי כבקשה ממך/)).toBeVisible();
     await expect(page.getByLabel(/משימה קבועה/)).toBeDisabled();
     await page.getByLabel("משימה", { exact: true }).fill(T.uriToDani);
@@ -74,7 +74,7 @@ test.describe.serial("teammates can request tasks from each other", () => {
     const page = await login(browser, "dani@example.com");
     // Request from Uri H sits in the separate peers group of Dani's card
     await expect(page.getByTestId("group-peers-1").getByText(T.uriToDani)).toBeVisible();
-    await expect(page.getByTestId("card-1").getByText("בקשות מעובדים אחרים")).toBeVisible();
+    await expect(page.getByTestId("card-1").getByText("בקשות מאנשי צוות אחרים")).toBeVisible();
 
     // Dani assigns a task to Uri H → top group in Uri's card, above Uri's own task
     await page.getByTestId("card-5").getByRole("button", { name: /הוספת משימה/ }).click();

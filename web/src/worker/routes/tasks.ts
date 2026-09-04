@@ -37,7 +37,7 @@ taskRoutes.get("/board", async (c) => {
     .where(and(isNull(tasks.deletedAt), eq(tasks.createdById, me.id), notInArray(tasks.assigneeId, visible.length ? visible : [-1]), or(notDone, doneVisibleOn(date))))
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
     .all();
-  if (visible.length === 0) return c.json<BoardResponse & { upcoming: [] }>({ date, tasks: [], upcoming: [], sent: sent.map(toTask) });
+  if (visible.length === 0) return c.json<BoardResponse>({ date, today, tasks: [], upcoming: [], sent: sent.map(toTask) });
 
   const rows = await db
     .select()
@@ -70,7 +70,7 @@ taskRoutes.get("/board", async (c) => {
 
   const counts = await photoCounts(db, [...rows, ...upcoming, ...sent].map((t) => t.id));
   const withCount = (t: typeof rows[number]) => ({ ...toTask(t), photoCount: counts.get(t.id) ?? 0 });
-  return c.json({ date, tasks: rows.map(withCount), upcoming: upcoming.map(withCount), sent: sent.map(withCount) });
+  return c.json<BoardResponse>({ date, today, tasks: rows.map(withCount), upcoming: upcoming.map(withCount), sent: sent.map(withCount) });
 });
 
 taskRoutes.post("/", async (c) => {
@@ -84,13 +84,13 @@ taskRoutes.post("/", async (c) => {
   const wds = parseWeekdays(body.weekdays);
   if (!title) return c.json({ error: "חובה להזין שם משימה" }, 400);
   if (details === null) return c.json({ error: "הפירוט ארוך מדי" }, 400);
-  if (assigneeId === null) return c.json({ error: "חובה לבחור עובד" }, 400);
+  if (assigneeId === null) return c.json({ error: "חובה לבחור איש צוות" }, 400);
   if (!isIsoDate(dueDate)) return c.json({ error: "תאריך לא תקין" }, 400);
   if (wds === null) return c.json({ error: "ימים לא תקינים" }, 400);
   const teamPublic = c.get("teamPublic");
-  if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "עובד לא תקין" }, 400);
+  if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "איש צוות לא תקין" }, 400);
   if (wds.length > 0 && !canManage(toPublicUser(me, false), assigneeId, teamPublic)) {
-    return c.json({ error: "משימה קבועה אפשר להגדיר רק לעצמך או לעובדים שאתה מנהל" }, 403);
+    return c.json({ error: "משימה קבועה אפשר להגדיר רק לעצמך או לאנשי צוות שאתה מנהל" }, 403);
   }
 
   const today = localDate(c.env.TIMEZONE);
@@ -162,13 +162,39 @@ taskRoutes.post("/:id/status", async (c) => {
   const patch: Partial<typeof tasks.$inferInsert> = { updatedAt: now };
   const metricNotes: string[] = [];
   if (row.kind === "leads") {
-    for (const [field, key, label] of [["metricDeals", "metricDeals", "נסלקים"], ["metricCalls", "metricCalls", "שיחות"]] as const) {
-      if (body[key] === undefined) continue;
-      const v = body[key] === null || body[key] === "" ? null : int(body[key]);
-      if (v === undefined || (v !== null && (v < 0 || v > 100000))) return c.json({ error: "כמות לא תקינה" }, 400);
-      if (v !== row[field]) {
-        patch[field] = v;
-        metricNotes.push(`${label}: ${v ?? "–"}`);
+    // Calls: a plain count
+    if (body.metricCalls !== undefined) {
+      const raw = body.metricCalls;
+      const v = raw === null || raw === "" ? null : int(raw);
+      if (v === undefined || v === null && raw !== null && raw !== "") return c.json({ error: "כמות שיחות לא תקינה" }, 400);
+      if (v !== null && (v < 0 || v > 100000)) return c.json({ error: "כמות שיחות לא תקינה" }, 400);
+      if (v !== row.metricCalls) {
+        patch.metricCalls = v;
+        metricNotes.push(`שיחות: ${v ?? "–"}`);
+      }
+    }
+    // Closed deals: a list of {name, amount}; the count is derived.
+    // TODO(DND CASH): push these deals into the DND CASH system once that integration is built.
+    if (body.deals !== undefined) {
+      if (!Array.isArray(body.deals) || body.deals.length > 50) return c.json({ error: "רשימת נסלקים לא תקינה" }, 400);
+      const deals: { name: string; amount: number | null }[] = [];
+      for (const d of body.deals as unknown[]) {
+        const o = (d ?? {}) as Record<string, unknown>;
+        const name = str(o.name, 100);
+        if (!name) return c.json({ error: "חובה למלא שם לקוח לכל נסלק" }, 400);
+        let amount: number | null = null;
+        if (o.amount !== undefined && o.amount !== null && o.amount !== "") {
+          const n = typeof o.amount === "number" ? o.amount : Number(o.amount);
+          if (!Number.isFinite(n) || n < 0 || n > 10_000_000) return c.json({ error: "סכום לא תקין" }, 400);
+          amount = Math.round(n * 100) / 100;
+        }
+        deals.push({ name, amount });
+      }
+      const json = deals.length ? JSON.stringify(deals) : null;
+      if (json !== row.dealsJson) {
+        patch.dealsJson = json;
+        patch.metricDeals = deals.length ? deals.length : null;
+        metricNotes.push(deals.length ? `נסלקים: ${deals.length} (${deals.map((d) => (d.amount != null ? `${d.name} ${d.amount}₪` : d.name)).join(", ")})` : "נסלקים: –");
       }
     }
   }
@@ -235,6 +261,10 @@ taskRoutes.patch("/:id", async (c) => {
   if (body.dueDate !== undefined) {
     if (!isIsoDate(body.dueDate)) return c.json({ error: "תאריך לא תקין" }, 400);
     if (body.dueDate !== row.dueDate) {
+      if (row.recurringId) return c.json({ error: "התאריך של משימה קבועה נקבע אוטומטית ואי אפשר לשנות אותו. אפשר להוסיף משימה רגילה ליום אחר." }, 400);
+      if (row.status === "done" && row.completedDate && body.dueDate > row.completedDate) {
+        return c.json({ error: "אי אפשר לקבוע תאריך יעד מאוחר ממועד ההשלמה" }, 400);
+      }
       patch.dueDate = body.dueDate;
       changes.push(`תאריך: ${row.dueDate} ← ${body.dueDate}`);
     }
@@ -242,10 +272,11 @@ taskRoutes.patch("/:id", async (c) => {
   let reassignedTo: number | null = null;
   if (body.assigneeId !== undefined) {
     const assigneeId = int(body.assigneeId);
-    const target = c.get("team").find((u) => u.id === assigneeId && u.active === 1);
-    if (assigneeId === null || !target) return c.json({ error: "עובד לא תקין" }, 400);
-    if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "עובד לא תקין" }, 400);
+    if (assigneeId === null) return c.json({ error: "איש צוות לא תקין" }, 400);
     if (assigneeId !== row.assigneeId) {
+      // Only a *new* assignee must be active; editing a task whose assignee was deactivated stays possible.
+      if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "איש צוות לא תקין" }, 400);
+      if (row.recurringId) return c.json({ error: "משימה קבועה אי אפשר להעביר לאיש צוות אחר" }, 400);
       patch.assigneeId = assigneeId;
       reassignedTo = assigneeId;
     }

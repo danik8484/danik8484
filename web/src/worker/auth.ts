@@ -1,10 +1,10 @@
-import { and, eq, gt, lt, desc, sql } from "drizzle-orm";
+import { and, eq, gt, lt, desc, sql, isNull } from "drizzle-orm";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { AppEnv } from "./context";
 import type { Env } from "./env";
 import { type Db } from "./db/client";
-import { users, loginCodes, loginLinks, sessions } from "./db/schema";
+import { users, loginCodes, loginLinks, sessions, pushSubscriptions } from "./db/schema";
 import { EmailNotConfigured, sendLoginCode } from "./email";
 
 const COOKIE = "sid";
@@ -55,11 +55,8 @@ export async function findUserByEmail(db: Db, env: Env, email: string) {
 export type RequestCodeResult = { ok: true; devCode?: string } | { ok: false; error: string; status: number };
 
 export async function requestCode(db: Db, env: Env, email: string): Promise<RequestCodeResult> {
-  const user = await findUserByEmail(db, env, email);
-  // Do not reveal whether the email exists. Always respond ok.
-  if (!user || !user.active) return { ok: true };
-
   const now = Date.now();
+  // Rate limit first, for every address alike, so the response cannot reveal whether an address is registered.
   const recent = await db
     .select({ n: sql<number>`count(*)` })
     .from(loginCodes)
@@ -67,6 +64,12 @@ export async function requestCode(db: Db, env: Env, email: string): Promise<Requ
     .get();
   if ((recent?.n ?? 0) >= MAX_CODES_PER_HOUR) {
     return { ok: false, error: "יותר מדי בקשות. נסה שוב בעוד שעה.", status: 429 };
+  }
+  const user = await findUserByEmail(db, env, email);
+  if (!user || !user.active) {
+    // Unknown address: record the attempt (counts toward the limit) and answer exactly like a real one.
+    await db.insert(loginCodes).values({ email, codeHash: "-", expiresAt: now, used: 1, createdAt: now }).run();
+    return { ok: true };
   }
 
   const code = randomCode();
@@ -78,7 +81,8 @@ export async function requestCode(db: Db, env: Env, email: string): Promise<Requ
     await sendLoginCode(env, email, code);
   } catch (e) {
     if (e instanceof EmailNotConfigured) {
-      return { ok: false, error: "שליחת קודים במייל עדיין לא הופעלה. בקש מהמנהל קישור כניסה.", status: 503 };
+      console.error("login code requested but email sending is not configured");
+      return { ok: true };
     }
     throw e;
   }
@@ -96,15 +100,21 @@ export async function verifyCode(db: Db, env: Env, email: string, code: string):
     .orderBy(desc(loginCodes.createdAt))
     .get();
   if (!row) return { ok: false, error: "קוד שגוי או שפג תוקפו" };
-  if (row.attempts >= MAX_ATTEMPTS) return { ok: false, error: "יותר מדי ניסיונות. בקש קוד חדש." };
+
+  // Atomic attempt counter: parallel guesses cannot slip past the cap.
+  const bumped = await db
+    .update(loginCodes)
+    .set({ attempts: sql`${loginCodes.attempts} + 1` })
+    .where(and(eq(loginCodes.id, row.id), lt(loginCodes.attempts, MAX_ATTEMPTS)))
+    .returning({ id: loginCodes.id })
+    .get();
+  if (!bumped) return { ok: false, error: "יותר מדי ניסיונות. בקש קוד חדש." };
 
   const hash = await sha256(email + ":" + code.trim());
-  if (hash !== row.codeHash) {
-    await db.update(loginCodes).set({ attempts: row.attempts + 1 }).where(eq(loginCodes.id, row.id)).run();
-    return { ok: false, error: "קוד שגוי או שפג תוקפו" };
-  }
-  await db.update(loginCodes).set({ used: 1 }).where(eq(loginCodes.id, row.id)).run();
-  // Cleanup old codes opportunistically
+  if (hash !== row.codeHash) return { ok: false, error: "קוד שגוי או שפג תוקפו" };
+  // Single use, atomically
+  const consumed = await db.update(loginCodes).set({ used: 1 }).where(and(eq(loginCodes.id, row.id), eq(loginCodes.used, 0))).returning({ id: loginCodes.id }).get();
+  if (!consumed) return { ok: false, error: "קוד שגוי או שפג תוקפו" };
   await db.delete(loginCodes).where(lt(loginCodes.expiresAt, now - 24 * 60 * 60 * 1000)).run();
   return { ok: true, userId: user.id };
 }
@@ -126,7 +136,11 @@ export async function createSession(c: Context<AppEnv>, db: Db, userId: number) 
 
 export async function destroySession(c: Context<AppEnv>, db: Db) {
   const id = getCookie(c, COOKIE);
-  if (id) await db.delete(sessions).where(eq(sessions.id, id)).run();
+  if (id) {
+    await db.delete(sessions).where(eq(sessions.id, id)).run();
+    // Devices registered under this session stop receiving this user's notifications.
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.sessionId, id)).run();
+  }
   deleteCookie(c, COOKIE, { path: "/" });
 }
 
@@ -163,6 +177,8 @@ export async function redeemLoginLink(db: Db, token: string): Promise<{ ok: true
   if (row.expiresAt < now) return { ok: false, error: "פג תוקף הקישור. בקש קישור חדש." };
   const user = await db.select().from(users).where(eq(users.id, row.userId)).get();
   if (!user || !user.active) return { ok: false, error: "המשתמש אינו פעיל" };
-  await db.update(loginLinks).set({ usedAt: now }).where(eq(loginLinks.id, row.id)).run();
+  // Single use, atomically (two simultaneous clicks cannot both sign in)
+  const claimed = await db.update(loginLinks).set({ usedAt: now }).where(and(eq(loginLinks.id, row.id), isNull(loginLinks.usedAt))).returning({ id: loginLinks.id }).get();
+  if (!claimed) return { ok: false, error: "הקישור כבר נוצל. בקש קישור חדש." };
   return { ok: true, userId: user.id };
 }

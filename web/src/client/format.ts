@@ -9,7 +9,7 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "מנהל ראשי",
   manager: "מנהל",
-  employee: "עובד",
+  employee: "איש צוות",
 };
 
 export const WEEKDAYS_SHORT = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];

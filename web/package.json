@@ -12,7 +12,6 @@
     "deploy": "npm run build && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply fitness-daily-tasks --local",
-    "db:migrate:remote": "wrangler d1 migrations apply fitness-daily-tasks --remote",
     "test:e2e": "playwright test"
   },
   "keywords": [],

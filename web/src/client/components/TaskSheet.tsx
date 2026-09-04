@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Attachment, Task, TaskEvent, TaskStatus } from "@shared/types";
+import type { Attachment, Deal, Task, TaskEvent, TaskStatus } from "@shared/types";
 import { canEditOrDelete, canMarkDone, noteRequiredForInProgress, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
 import TaskForm from "./TaskForm";
 import { STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime } from "../format";
-import { prepareImage } from "../image";
+import { makeThumb, prepareImage } from "../image";
 
 interface Props {
   taskId: number | null;
@@ -25,7 +25,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const fileInput = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<TaskStatus>("open");
   const [note, setNote] = useState("");
-  const [deals, setDeals] = useState<string>("");
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [dealsOpen, setDealsOpen] = useState(false);
   const [calls, setCalls] = useState<string>("");
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
   const [reason, setReason] = useState("");
@@ -40,7 +41,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setPhotos(res.attachments);
     setStatus(res.task.status);
     setNote(res.task.status === "in_progress" ? res.task.progressNote : "");
-    setDeals(res.task.metricDeals == null ? "" : String(res.task.metricDeals));
+    setDeals(res.task.deals);
+    setDealsOpen(res.task.deals.length > 0);
     setCalls(res.task.metricCalls == null ? "" : String(res.task.metricCalls));
   }, [taskId]);
 
@@ -57,7 +59,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const canDone = task ? canMarkDone(s.user, task, s.users) : false;
   const noteRequired = task ? noteRequiredForInProgress(task) : true;
   const tier = task ? taskTier(task, s.users) : 1;
-  const metricsDirty = task ? task.kind === "leads" && (deals !== (task.metricDeals == null ? "" : String(task.metricDeals)) || calls !== (task.metricCalls == null ? "" : String(task.metricCalls))) : false;
+  const cleanDeals = deals.filter((d) => d.name.trim() !== "");
+  const metricsDirty = task ? task.kind === "leads" && (JSON.stringify(cleanDeals) !== JSON.stringify(task.deals) || calls !== (task.metricCalls == null ? "" : String(task.metricCalls))) : false;
   const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") || metricsDirty : false;
 
   async function saveStatus() {
@@ -65,7 +68,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setBusy(true);
     setError("");
     try {
-      await api.setStatus(task.id, status, note, task.kind === "leads" ? { metricDeals: deals === "" ? null : Number(deals), metricCalls: calls === "" ? null : Number(calls) } : undefined);
+      await api.setStatus(task.id, status, note, task.kind === "leads" ? { deals: cleanDeals.map((d) => ({ name: d.name.trim(), amount: d.amount })), metricCalls: calls === "" ? null : Number(calls) } : undefined);
       await load();
       setNote(status === "in_progress" ? note : "");
       onChanged();
@@ -83,7 +86,9 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     try {
       for (const file of Array.from(files).slice(0, 10)) {
         const img = await prepareImage(file);
-        await api.uploadPhoto(task.id, img.blob, img.name, img.width, img.height);
+        const saved = await api.uploadPhoto(task.id, img.blob, img.name, img.width, img.height);
+        const thumb = await makeThumb(img.blob);
+        if (thumb) await api.uploadThumb(saved.id, thumb);
       }
       await load();
       onChanged();
@@ -193,7 +198,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             </h3>
             {task.details && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{task.details}</p>}
             <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
-              <dt>עובד</dt>
+              <dt>איש צוות</dt>
               <dd className="font-semibold text-ink-700">{s.nameOf(task.assigneeId)}</dd>
               <dt>נוסף על ידי</dt>
               <dd className="font-semibold text-ink-700">
@@ -210,6 +215,24 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                 </>
               )}
             </dl>
+            {task.kind === "leads" && (task.deals.length > 0 || task.metricCalls != null) && (
+              <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                {task.metricCalls != null && <div>שיחות: <b>{task.metricCalls}</b></div>}
+                {task.deals.length > 0 && (
+                  <div>
+                    נסלקים: <b>{task.deals.length}</b>
+                    <ul className="mt-1 list-disc ps-5 text-xs">
+                      {task.deals.map((d, i) => (
+                        <li key={i}>
+                          {d.name}
+                          {d.amount != null && ` · ${d.amount.toLocaleString("he-IL")} ₪`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
             {task.status === "in_progress" && task.progressNote && (
               <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
                 <span className="block text-xs font-semibold text-amber-800">מה בוצע ומה נשאר</span>
@@ -256,7 +279,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
               )}
               <label className="mt-3 block">
                 <span className="mb-1 block text-sm font-semibold text-ink-700">
-                  {status === "in_progress" ? (noteRequired ? "מה בוצע ומה נשאר? (חובה)" : "מה בוצע ומה נשאר? (לא חובה)") : status === "done" ? "הערת סיום (לא חובה)" : "הערה (לא חובה)"}
+                  {status === "in_progress" ? (noteRequired ? "מה בוצע ומה נשאר? (חובה)" : "מה בוצע ומה נשאר?") : status === "done" ? "הערת סיום" : "הערה"}
                 </span>
                 <textarea
                   className={inputCls}
@@ -267,15 +290,65 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                 />
               </label>
               {task.kind === "leads" && (
-                <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="mt-3 space-y-3">
                   <label className="block">
-                    <span className="mb-1 block text-sm font-semibold text-ink-700">כמות נסלקים (לא חובה)</span>
-                    <input type="number" inputMode="numeric" min={0} className={inputCls} value={deals} onChange={(e) => setDeals(e.target.value)} data-testid="metric-deals" />
+                    <span className="mb-1 block text-sm font-semibold text-ink-700">כמות שיחות</span>
+                    <input type="number" inputMode="numeric" min={0} step={1} className={inputCls} value={calls} onChange={(e) => setCalls(e.target.value)} data-testid="metric-calls" />
                   </label>
-                  <label className="block">
-                    <span className="mb-1 block text-sm font-semibold text-ink-700">כמות שיחות (לא חובה)</span>
-                    <input type="number" inputMode="numeric" min={0} className={inputCls} value={calls} onChange={(e) => setCalls(e.target.value)} data-testid="metric-calls" />
-                  </label>
+                  {/* TODO(DND CASH): connect closed deals to the DND CASH system */}
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3" data-testid="deals-panel">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-ink-700">נסלקים{cleanDeals.length > 0 && ` (${cleanDeals.length})`}</span>
+                      {!dealsOpen && (
+                        <Button
+                          variant="secondary"
+                          className="px-3 py-1.5"
+                          onClick={() => {
+                            setDealsOpen(true);
+                            if (deals.length === 0) setDeals([{ name: "", amount: null }]);
+                          }}
+                        >
+                          + הוספת נסלק
+                        </Button>
+                      )}
+                    </div>
+                    {dealsOpen && (
+                      <div className="mt-2 space-y-2">
+                        {deals.map((d, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input
+                              className={`${inputCls} flex-1`}
+                              placeholder="שם לקוח"
+                              value={d.name}
+                              onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                              data-testid={`deal-name-${i}`}
+                            />
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              className={`${inputCls} w-28`}
+                              placeholder="סכום ₪"
+                              value={d.amount ?? ""}
+                              onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, amount: e.target.value === "" ? null : Number(e.target.value) } : x)))}
+                              data-testid={`deal-amount-${i}`}
+                            />
+                            <button
+                              type="button"
+                              className="grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                              aria-label="הסרת נסלק"
+                              onClick={() => setDeals((arr) => arr.filter((_, j) => j !== i))}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        <button type="button" className="text-sm font-semibold text-brand-700" onClick={() => setDeals((arr) => [...arr, { name: "", amount: null }])} data-testid="deal-add">
+                          + עוד לקוח
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               <ErrorText>{error}</ErrorText>
@@ -306,7 +379,19 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                 {photos.map((p) => (
                   <li key={p.id}>
                     <button type="button" onClick={() => setLightbox(p)} className="block aspect-square w-full overflow-hidden rounded-xl bg-slate-100" aria-label={`תמונה: ${p.fileName}`}>
-                      <img src={`/api/photos/${p.id}`} alt={p.fileName} loading="lazy" className="size-full object-cover" />
+                      <img
+                        src={`/api/photos/${p.id}?thumb=1`}
+                        alt={p.fileName}
+                        loading="lazy"
+                        className="size-full object-cover"
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if (!img.dataset.retried) {
+                            img.dataset.retried = "1";
+                            window.setTimeout(() => (img.src = `/api/photos/${p.id}?r=${Date.now()}`), 1500);
+                          }
+                        }}
+                      />
                     </button>
                     <span className="mt-0.5 block truncate text-[10px] text-slate-500">
                       {s.nameOf(p.uploadedById)} · {fmtDateTime(p.createdAt)}
