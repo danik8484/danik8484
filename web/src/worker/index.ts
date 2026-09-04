@@ -12,10 +12,12 @@ import { userRoutes } from "./routes/users";
 import type { MeResponse } from "@shared/types";
 import type { Env } from "./env";
 import { materializeRecurring } from "./recurring";
+import { ensureSchema } from "./migrate";
 
 const app = new Hono<AppEnv>();
 
 app.use("/api/*", async (c, next) => {
+  await ensureSchema(c.env);
   c.set("db", getDb(c.env.DB));
   c.header("Cache-Control", "no-store");
   await next();
@@ -62,7 +64,6 @@ export default {
   fetch: app.fetch,
   /** Nightly: create today's recurring tasks even if nobody opened the app. */
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    const db = getDb(env.DB);
-    ctx.waitUntil(materializeRecurring(db, localDate(env.TIMEZONE)));
+    ctx.waitUntil(ensureSchema(env).then(() => materializeRecurring(getDb(env.DB), localDate(env.TIMEZONE))));
   },
 };

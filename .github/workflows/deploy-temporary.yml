@@ -25,43 +25,21 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      - name: Create D1 database on a temporary account
-        run: |
-          set -euo pipefail
-          npx wrangler d1 create fitness-daily-tasks --temporary > d1.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' d1.out; exit 1; }
-          DB_ID=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' d1.out | head -1)
-          test -n "$DB_ID"
-          sed -i "s/REPLACE_WITH_YOUR_D1_DATABASE_ID/$DB_ID/" wrangler.jsonc
-          echo "database created"
-
-      - name: Apply migrations
-        run: |
-          set -euo pipefail
-          npx wrangler d1 migrations apply fitness-daily-tasks --remote --temporary > mig.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' mig.out; exit 1; }
-          grep -c "✅" mig.out || true
-
-      - name: Create the first admin login link
+      - name: Deploy (provisions D1 automatically, schema applied by the Worker)
         run: |
           set -euo pipefail
           TOKEN=$(openssl rand -hex 32)
           echo "::add-mask::$TOKEN"
           HASH=$(printf 'link:%s' "$TOKEN" | sha256sum | cut -d' ' -f1)
-          NOW=$(date +%s000)
-          EXP=$((NOW + 7*24*60*60*1000))
-          npx wrangler d1 execute fitness-daily-tasks --remote --temporary --command "INSERT INTO login_links (token_hash, user_id, created_by_id, expires_at, created_at) VALUES ('$HASH', 1, NULL, $EXP, $NOW);" > link.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' link.out; exit 1; }
-          echo "$TOKEN" > token.txt
-          echo "login link created"
-
-      - name: Deploy
-        run: |
-          set -euo pipefail
-          npx wrangler deploy --temporary > deploy.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' deploy.out; exit 1; }
+          npx wrangler deploy --temporary --var "BOOTSTRAP_ADMIN_LINK_HASH:$HASH" > deploy.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' deploy.out; exit 1; }
           APP_URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.out | head -1)
           CLAIM_URL=$(grep -oE 'https://[^ ]*claim[^ ]*' deploy.out | head -1)
           echo "::add-mask::$CLAIM_URL"
           test -n "$APP_URL"
-          printf '{"appUrl":"%s","claimUrl":"%s","loginLink":"%s/login?t=%s"}\n' "$APP_URL" "$CLAIM_URL" "$APP_URL" "$(cat token.txt)" > payload.json
-          sed -E 's#https?://[^ "]+#<url>#g' deploy.out | tail -15
+          printf '{"appUrl":"%s","claimUrl":"%s","loginLink":"%s/login?t=%s"}\n' "$APP_URL" "$CLAIM_URL" "$APP_URL" "$TOKEN" > payload.json
+          sed -E 's#https?://[^ "]+#<url>#g' deploy.out | tail -20
+          # Warm up: first request applies the schema and the bootstrap link
+          for i in 1 2 3 4 5 6; do code=$(curl -s -o /dev/null -w '%{http_code}' "$APP_URL/api/me"); echo "warm-up $i: $code"; [ "$code" = "401" ] && break; sleep 5; done
 
       - name: Encrypt result for the operator
         run: |

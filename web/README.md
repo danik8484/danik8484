@@ -76,30 +76,26 @@ npx playwright test
    cd web
    npx wrangler login
    ```
-3. **יצירת מסד נתונים:**
-   ```bash
-   npx wrangler d1 create fitness-daily-tasks
-   ```
-   הפקודה מדפיסה `database_id`. הדבק אותו ב-`wrangler.jsonc` במקום `REPLACE_WITH_YOUR_D1_DATABASE_ID`.
-4. **יצירת הטבלאות:**
-   ```bash
-   npm run db:migrate:remote
-   ```
-5. **חשבון Brevo** (חינמי, לשליחת המיילים): https://www.brevo.com
+3. **מסד הנתונים והטבלאות** נוצרים לבד: הפריסה הראשונה יוצרת את מסד הנתונים (D1), והשרת יוצר את הטבלאות בבקשה הראשונה.
+4. **חשבון Brevo** (חינמי, לשליחת המיילים): https://www.brevo.com
    - אמת את כתובת השולח (Senders & IP → Senders → Add a sender).
    - צור מפתח API (SMTP & API → API Keys → Generate a new API key).
-6. **הגדרת סודות:**
+5. **הגדרת סודות:**
    ```bash
    npx wrangler secret put ADMIN_EMAIL      # המייל של המנהל הראשי (דני)
    npx wrangler secret put BREVO_API_KEY    # המפתח מ-Brevo
    npx wrangler secret put MAIL_FROM        # כתובת השולח שאומתה ב-Brevo
    ```
-7. **פריסה:**
+6. **פריסה:**
    ```bash
    npm run deploy
    ```
    בסוף מודפסת הכתובת, בסגנון `https://fitness-daily-tasks.<שם-החשבון>.workers.dev`.
-8. **כניסה ראשונה:** היכנס עם המייל שהוגדר ב-`ADMIN_EMAIL`, עבור ל"משתמשים" והגדר מייל לכל עובד. מרגע זה כולם יכולים להיכנס.
+7. **כניסה ראשונה:** היכנס עם המייל שהוגדר ב-`ADMIN_EMAIL` (או עם קישור כניסה חד-פעמי), עבור ל"משתמשים" והגדר מייל לכל עובד. מרגע זה כולם יכולים להיכנס.
+
+### פריסה בלי חשבון Cloudflare (חשבון זמני)
+
+ה-workflow `deploy-temporary.yml` ב-GitHub Actions פורס לחשבון Cloudflare זמני בלי שום פרטי התחברות, ומדפיס (מוצפן) קישור "אימוץ" של החשבון וקישור כניסה ראשון למנהל. צריך לאמץ את החשבון תוך 60 דקות, אחרת הוא נמחק. אחרי האימוץ הכל נשאר בחשבון שלך, ופריסות עתידיות נעשות עם `wrangler login` או עם `CLOUDFLARE_API_TOKEN` ב-GitHub.
 
 כל עדכון עתידי: `npm run deploy` שוב.
 

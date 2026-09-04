@@ -8,4 +8,5 @@ export interface Env {
   BREVO_API_KEY?: string;
   MAIL_FROM?: string;
   MAIL_FROM_NAME?: string;
+  BOOTSTRAP_ADMIN_LINK_HASH?: string;
 }
