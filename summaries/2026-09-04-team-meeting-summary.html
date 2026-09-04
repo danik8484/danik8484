@@ -14,8 +14,8 @@ body{margin:0;background:#fff;color:#1B2A2A;font-family:"Heebo",Arial,sans-serif
 h1{font-family:"Frank Ruhl Libre",serif;font-weight:700;font-size:26pt;line-height:1.15;margin:4pt 0 8pt}
 .meta{display:flex;flex-wrap:wrap;gap:4pt 18pt;color:#5C6B69;font-size:10pt}
 .meta b{color:#1B2A2A;font-weight:500}
-h2{font-family:"Frank Ruhl Libre",serif;font-weight:700;font-size:17pt;margin:18pt 0 8pt;padding-bottom:4pt;border-bottom:1px solid #D6DDDB;display:flex;align-items:baseline;gap:8pt;break-after:avoid}
-h2 .n{font-family:"Heebo",sans-serif;font-size:9pt;color:#0B7A75;font-weight:700;letter-spacing:.08em}
+h2{font-family:"Frank Ruhl Libre",serif;font-weight:700;font-size:18pt;margin:18pt 0 8pt;padding-bottom:4pt;border-bottom:1px solid #D6DDDB;display:flex;align-items:center;gap:10pt;break-after:avoid}
+h2.dani{border-color:#0B7A75} h2.ori{border-color:#B8823A} h2.ron{border-color:#4B3F8E}
 h3{font-size:12pt;font-weight:700;margin:12pt 0 5pt;break-after:avoid}
 p{margin:0 0 7pt}
 .lead{font-size:12pt}
@@ -23,34 +23,30 @@ p{margin:0 0 7pt}
 ol,ul{padding-right:18pt;margin:0 0 6pt}
 li{margin:0 0 4pt;break-inside:avoid}
 table{border-collapse:collapse;width:100%;font-size:10pt;margin:4pt 0 8pt}
-th,td{padding:3.5pt 7pt;text-align:right;vertical-align:top;border-bottom:1px solid #D6DDDB}
+th,td{padding:4pt 7pt;text-align:right;vertical-align:top;border-bottom:1px solid #D6DDDB}
 th{font-size:8.5pt;letter-spacing:.06em;color:#5C6B69;background:#F4F6F4;font-weight:700}
 tr{break-inside:avoid}
 td.num,th.num{width:22pt;color:#5C6B69;font-variant-numeric:tabular-nums}
-.when{color:#5C6B69;white-space:nowrap}
-.chip{display:inline-block;font-size:8.5pt;font-weight:700;padding:1pt 7pt;border-radius:20pt;white-space:nowrap;margin-left:2pt}
+td.t{font-weight:700;width:34%}
+.when{color:#5C6B69;white-space:nowrap;width:70pt}
+.chip{display:inline-block;font-size:9.5pt;font-weight:700;padding:1pt 9pt;border-radius:20pt;white-space:nowrap;font-family:"Heebo",sans-serif}
 .chip.dani{background:#DCEFED;color:#0B7A75}
 .chip.ori{background:#F3E6D2;color:#7A4B0B}
 .chip.ron{background:#E6E2F4;color:#4B3F8E}
 .chip.all{background:#E4E9E8;color:#4A5A58}
-.sys{border:1px solid #D6DDDB;border-radius:4pt;padding:8pt 11pt;margin:0 0 8pt;break-inside:avoid}
-.sys h3{margin:0 0 4pt;display:flex;align-items:center;gap:6pt;flex-wrap:wrap}
-.sys .who{font-size:9pt;color:#5C6B69;font-weight:500}
-.sys ul{margin:3pt 0 0}
-.sys li{margin:0 0 3pt}
+.box{border:1px solid #D6DDDB;border-radius:4pt;padding:8pt 11pt;margin:0 0 8pt;break-inside:avoid}
+.box h3{margin:0 0 4pt}
+.box ul{margin:3pt 0 0}
+.box li{margin:0 0 3pt}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8pt;margin-bottom:6pt}
 .stats{display:flex;gap:8pt;margin:6pt 0 10pt}
 .stat{flex:1;border:1px solid #D6DDDB;border-radius:4pt;padding:6pt 9pt}
 .stat .v{font-size:18pt;font-weight:700;line-height:1.1;color:#0B7A75}
 .stat .l{font-size:9pt;color:#5C6B69}
-.people{display:grid;grid-template-columns:1fr 1fr;gap:8pt}
-.person{border:1px solid #D6DDDB;border-radius:4pt;padding:8pt 11pt;break-inside:avoid}
-.person h3{margin:0 0 5pt}
-.person ul{margin:0;padding-right:16pt}
-.person li{font-size:10pt;margin:0 0 3pt}
-.quotes{display:grid;gap:4pt;margin-top:2pt}
-.keep{break-inside:avoid}
-.q{font-family:"Frank Ruhl Libre",serif;font-size:11.5pt;padding:1pt 10pt;border-right:3px solid #0B7A75}
+.quotes{display:grid;grid-template-columns:1fr 1fr;gap:4pt 10pt;margin-top:2pt}
+.q{font-family:"Frank Ruhl Libre",serif;font-size:11pt;padding:1pt 10pt;border-right:3px solid #0B7A75}
 .pb{break-before:page}
+.keep{break-inside:avoid}
 footer{margin-top:10pt;padding-top:6pt;border-top:1px solid #D6DDDB;color:#5C6B69;font-size:9pt}
 </style>
 </head>
@@ -61,170 +57,136 @@ footer{margin-top:10pt;padding-top:6pt;border-top:1px solid #D6DDDB;color:#5C6B6
   <h1>שירות, אוטומציות ופאנל ניהול אחד</h1>
   <div class="meta">
     <span>תאריך <b>4.9.2026</b></span>
-    <span>הקלטה <b>40:47 דקות</b></span>
     <span>משתתפים <b>דני, רון, אורי</b></span>
     <span>ישיבה הבאה <b>יום ראשון 9:00 במשרד</b></span>
   </div>
 </div>
 
-<h2><span class="n">01</span>סיכום כללי</h2>
+<h2>סיכום</h2>
 <p class="lead">הישיבה עסקה בשלושה נושאים: מתאמנים שלא משתמשים באפליקציה כמו שצריך ואיך לזהות אותם אוטומטית; איחוד כל הכלים הפנימיים לפאנל ניהול אחד; ושגרת מענה למתאמנים, בדגש על חדשים.</p>
-<p>אורי הציג כרטסת מתאמנים ומערכת ניהול משימות שבנה. דני הציג דשבורד סטטיסטיקות. ההחלטה המרכזית: דני בונה אוטומציות התראה ופאנל ניהול מרכזי, אורי ממשיך לפתח את הכרטסת וניהול המשימות, ורון מוצמד לאורי כמנטור. השבוע הבא הוא השבוע לפני החגים, וצפויים הרבה מתאמנים חדשים.</p>
-<div class="note">הסיכום מבוסס על תמלול אוטומטי של הקלטת הפגישה. שמות של מתאמנים עלולים להיות משובשים.</div>
 
-<h2><span class="n">02</span>הבעיות שעלו</h2>
-<ol>
-  <li><b>מתאמנים לא נכנסים לאפליקציה.</b> בודדים, אבל קיים, ואין דרך סיסטמטית לזהות.</li>
-  <li><b>לא ממלאים משקלי עבודה,</b> טועים בחזרות, לא לוחצים התחל/סיים. גם כשזה מוסבר בשיחת הפתיחה ובהודעת התוכניות, חלק קוראים ברפרוף.</li>
-  <li><b>לא מעלים תמונות ביום מעקבים,</b> גם אחרי כמה תזכורות. "אעלה מחר" ולא מעלים.</li>
-  <li><b>הודעת המעקב האוטומטית השבועית מבקשת היקפים,</b> אבל מודדים היקפים רק פעם בחודש. יוצר בלבול.</li>
-  <li><b>גיל, גובה ומשקל התחלתי לא נגישים בפרופיל.</b> כדי לחשב ניטרלי או לשנות תפריט צריך להיכנס לשאלון.</li>
-  <li><b>האוטופיט לא רספונסיבי</b> ולא נוח בטלפון, כשרוב היום כולם בטלפון.</li>
-  <li><b>אין שעות מענה מוגדרות.</b> אורי עונה שעה שלמה בלילה לכל מי שקופץ. ביקורת סרטונים נשכחה פעמיים השבוע.</li>
-  <li><b>שלושה מתאמנים חדשים של אורי ביקשו שיחה עם דני</b> (אופיר, גיא, טימור) בגלל היעלמות של כ-20 דקות. אצל רון ודני: אפס בקשות.</li>
-  <li><b>תקשורת פנימית מפוזרת.</b> בדיקות הדם של נמרוד נשלחו לדני כמה פעמים בלי מענה. דני מוציא את רון מריכוז בלידים בשאלות "מה עם זה".</li>
-  <li><b>מנויים יקרים.</b> אלפי שקלים בשנה על כלים חיצוניים שאפשר לפתח בעצמנו.</li>
-</ol>
-<div class="stats">
-  <div class="stat"><div class="v">31</div><div class="l">מתאמנים חדשים אצל רון, 0 בקשות לשיחה עם דני</div></div>
-  <div class="stat"><div class="v">7</div><div class="l">מתאמנים חדשים אצל דני, 0 בקשות לשיחה</div></div>
-  <div class="stat"><div class="v">3</div><div class="l">בקשות לשיחה עם דני מחדשים של אורי</div></div>
-</div>
-
-<h2 class="pb"><span class="n">03</span>המערכות שצריך לבנות</h2>
-
-<div class="sys">
-  <h3>א. אוטומציות התראה <span class="chip dani">דני</span><span class="who">להתחיל השבוע, נבנה עם קלוד</span></h3>
-  <table>
-    <tr><th>התראה</th><th>תדירות</th><th>מה קורה</th></tr>
-    <tr><td>מתאמן לא נכנס לאפליקציה</td><td class="when">כל 48 שעות</td><td>הודעה למתאמן או התראה לקבוצת המאמנים. דני: 48 שעות זה המינימום.</td></tr>
-    <tr><td>משקלי עבודה</td><td class="when">סריקה כל 2–3 ימים</td><td>לא מילא משקל, טעה בחזרות, לא לחץ התחל/סיים – התראה למאמן.</td></tr>
-    <tr><td>תמונות יום מעקבים</td><td class="when">חמישי / שישי / שבת בערב</td><td>רשימה של מי שלא העלה תמונות.</td></tr>
-    <tr><td>היקפים</td><td class="when">השבוע האחרון בחודש</td><td>הודעת המעקב תבקש היקפים רק אז, לא כל שבוע.</td></tr>
-    <tr><td>מעקב אימונים</td><td class="when">השבוע</td><td>להתחיל להיכנס למעקב אימונים כשגרה.</td></tr>
-  </table>
-</div>
-
-<div class="sys">
-  <h3>ב. כרטסת מתאמן <span class="chip ori">אורי</span><span class="who">בנוי, להמשיך לפתח</span></h3>
-  <ul>
-    <li>כרטיס לכל מתאמן: ניטרלי, פלוס/מינוס אחוז, קלוריות יעד ותפריט מחושבים מראש.</li>
-    <li>חיפוש לפי שם, "הרחב על הלקוח": הערות קבועות (עמוס בלימודים, פציעת גב) ופתק מיידי (משהו שקרה היום וצריך טיפול).</li>
-    <li><b>להוסיף ליד השם:</b> גיל, גובה, משקל התחלתי.</li>
-    <li>מותאם לטלפון, בניגוד לאוטופיט.</li>
-  </ul>
-</div>
-
-<div class="sys">
-  <h3>ג. ניהול משימות ולו"ז יומי <span class="chip ori">אורי</span><span class="chip dani">דני</span><span class="who">בנוי, דני מרחיב</span></h3>
-  <ul>
-    <li>תכנון שבוע קדימה ומשימות חד-פעמיות (מתאמן חדש, תוכנית ל-X).</li>
-    <li>שגרה יומית קבועה: מענה בוקר, איחול יום טוב, מענה צהריים, מענה ערב, ביקורת סרטונים.</li>
-    <li>סימון ביצוע, היסטוריה עם שעת סימון (מענה בוקר שסומן ב-15:10 = לא תקין), משימות שלא הושלמו אתמול.</li>
-    <li><b>תוספות שדני ביקש:</b> חיבור ל-WhatsApp ולאוטופיט לסימון אוטומטי; לו"ז יומי לכל אחד; <b>כל אחד יכול להוסיף משימה לשני</b> ("דני, לעבור על בדיקות דם נמרוד"); המבצע מסמן וי וכותב פירוט במקום; חיבור לוג השיחות וה-CRM של רון (כמה שיחות, מי, פולו-אפים).</li>
-  </ul>
-</div>
-
-<div class="sys">
-  <h3>ד. דשבורד סטטיסטיקות <span class="chip dani">דני</span><span class="who">קיים, הוצג בישיבה</span></h3>
-  <ul>
-    <li>לכל מאמן: זמן מענה ממוצע (רון ירד מ-26 דקות), שעות אונליין, ממוצע שיחות פתיחה, סרטוני טכניקה שקיבלו פידבק, מי לוקח הכי הרבה זמן.</li>
-    <li>שביעות רצון מניתוח השיחות: 52 מרוצים, 22 מעורבים, 3 לא מרוצים. לכל מתאמן סיכום ותגיות (מחויבות גבוהה, הפסקת מעקבים, תסכול, הקפאה).</li>
-  </ul>
-</div>
-
-<div class="sys">
-  <h3>ה. פאנל ניהול מרכזי <span class="chip dani">דני</span><span class="who">Web app בענן, כ-100 דולר</span></h3>
-  <ul>
-    <li>מסך כניסה אחד: כרטסת מתאמנים, סטטיסטיקות, תזכורות והתראות, סיכומי שיחה, לו"ז יומי. נפתח כאפליקציה בטלפון, גישה לכל הצוות.</li>
-    <li><b>הערת אורי שהתקבלה:</b> לא כל הביצים בסל אחד. הפאנל הוא שער שמפנה למערכות נפרדות, כדי שנפילה של אחת לא תפיל את כולן.</li>
-  </ul>
-</div>
-
-<div class="sys">
-  <h3>ו. בוט תשובות ומאגר ידע <span class="chip dani">דני</span><span class="who">הצעת אורי, בהשראת "גורו" מוולט</span></h3>
-  <ul>
-    <li>מקלידים מילת מפתח ("רוצה לבטל", "רוצה שיחה עם דני", "מינון קריאטין") ומקבלים תשובה מפורטת לסיטואציה. אפשר גם להעלות צילום מסך של שיחה.</li>
-    <li>הבוט הקיים של דני כבר עונה על 42% מההודעות בלי התערבות ומכיר את כל השיחות. ישולב כך שמעלים צילום מסך ומקבלים 3 דוגמאות תשובה לבחירה.</li>
-  </ul>
-</div>
-
-<h2><span class="n">04</span>הוראות העבודה של דני</h2>
-<ol>
-  <li><b>שעת סגירת צ'אטים קבועה.</b> דני: 22:00–22:15. מודיעים לסביבה. בין 19:00 ל-22:00 לא חייבים לענות, אלא אם זה נרשם חדש. בבוקר, בקימה, עוברים שוב על כולם.</li>
-  <li><b>עקביות יוצרת ביטחון.</b> המתאמנים מתרגלים לשעות שלך. מי שנעלם פעם ב-19:00 ופעם ב-22:00 יוצר חרדה ("הוא לא עונה לי"). אין הזדמנות שנייה לרושם ראשוני.</li>
-  <li><b>עונים בבלוקים, לא בטפטוף.</b> סגירת צ'אטים מרוכזת לוקחת גג שעה, בדרך כלל פחות. לא שעה שלמה בלילה לכל מי שקופץ.</li>
-  <li><b>אם אפשר לענות עכשיו, עונים.</b> זה לוקח דקה-שתיים ושווה הרבה יותר כשהמתאמן בתחושה של הרגע.</li>
-  <li><b>בין הבלוקים מושכים בשאלות</b> (השיטה של רון): איך היה האימון, איך האנרגיה, איך הרגשת את התרגילים. תגובה על טכניקה מיד, גם בלי תשובה מלאה.</li>
-  <li><b>מתאמנים חדשים בעדיפות עליונה.</b> גם אם אין זמן לוותיקים, לחדש שולחים הודעה קצרה לוודא שהכל בסדר.</li>
-  <li><b>רצף שיחה מלא לחדשים.</b> לא יותר מחצי שעה בלי מענה, ובאגרסיביות פחות. שלחת תוכניות ואין תגובה 3.5 שעות (עומר ביטון): "עומר, תעדכן". 20 דקות שקט: סמיילי או "יש לך שאלה?". "בייביסיטר" בשבועיים הראשונים.</li>
-  <li><b>מסר יזום כשהתוכניות מתעכבות:</b> "בוקר טוב, היום בערב אני שולח תוכניות, תהיה חזק." כדי שהמתאמן לא יתחרבש עם עצמו.</li>
-  <li><b>שבוע ראשון הכי קריטי, שבוע שני קריטי, בשבוע השלישי כולם נרגעים.</b> שיחת המכירה לוחצת, והרגש חייב להישאר יציב אחרי הסגירה, אחרת הוא נופל.</li>
-  <li><b>רון הוא המנטור של אורי.</b> מילה של רון כמו מילה של דני. כל שאלה לרון: בשבוע הראשון בקבוצה, אחר כך בפרטי. רון פדנט, מרכז, מסביר טוב יותר ויש לו יותר זמן לעבור על שיחות.</li>
-  <li><b>ביקורת סרטונים כל ערב</b> כחלק מהצ'קליסט, לא לפי זיכרון.</li>
-</ol>
-
-<h2><span class="n">05</span>נקודות לשיפור</h2>
-<div class="people">
-  <div class="person"><h3><span class="chip ori">אורי</span></h3><ul>
-    <li>שעת סגירת צ'אטים קבועה ולעמוד בה. לא שעה בלילה.</li>
-    <li>רצף שיחה עם חדשים. זו הסיבה ל-3 בקשות השיחה עם דני.</li>
-    <li>ביקורת סרטונים בערב בלי לפספס.</li>
-    <li>שאלות לרון, לא לדני.</li>
-    <li>להוסיף לכרטסת גיל, גובה ומשקל התחלתי.</li>
-  </ul></div>
-  <div class="person"><h3><span class="chip ron">רון</span></h3><ul>
-    <li>מוקד: לידים ושיחות מכירה.</li>
-    <li>שאלות תפעוליות עוברות ללו"ז המשותף במקום הפרעות.</li>
-    <li>מנטור לאורי: מענה מרוכז ומפורט.</li>
-  </ul></div>
-  <div class="person"><h3><span class="chip dani">דני</span></h3><ul>
-    <li>פריטים שנופלים (בדיקות דם, ביטולים) נכנסים למשימות שלו דרך הצוות, במקום "אענה בערב".</li>
-    <li>בניית האוטומציות והפאנל.</li>
-    <li>לא להוציא את רון מריכוז בלידים.</li>
-  </ul></div>
-  <div class="person"><h3><span class="chip all">צוות</span></h3><ul>
-    <li>כלים פנימיים במקום מנויים יקרים.</li>
-    <li>היערכות לעומס מתאמנים חדשים לפני החגים.</li>
-  </ul></div>
-</div>
-
-<h2 class="pb"><span class="n">06</span>משימות</h2>
-<table>
-  <tr><th class="num">#</th><th>משימה</th><th>אחראי</th><th>מתי</th></tr>
-  <tr><td class="num">1</td><td>התראה על מתאמן שלא נכנס לאפליקציה 48 שעות</td><td><span class="chip dani">דני</span></td><td class="when">השבוע</td></tr>
-  <tr><td class="num">2</td><td>סריקת משקלי עבודה, חזרות, התחל/סיים כל 2–3 ימים</td><td><span class="chip dani">דני</span></td><td class="when">היום / השבוע</td></tr>
-  <tr><td class="num">3</td><td>התראה על מי שלא העלה תמונות ביום מעקבים (ה'/ו'/שבת בערב)</td><td><span class="chip dani">דני</span></td><td class="when">השבוע</td></tr>
-  <tr><td class="num">4</td><td>הודעת מעקב: היקפים רק בשבוע האחרון בחודש</td><td><span class="chip dani">דני</span></td><td class="when">השבוע</td></tr>
-  <tr><td class="num">5</td><td>פאנל ניהול מרכזי בענן שמאחד את כל המערכות</td><td><span class="chip dani">דני</span></td><td class="when">בהמשך</td></tr>
-  <tr><td class="num">6</td><td>לו"ז יומי לכל אחד, הוספת משימות זה לזה, חיבור CRM של רון</td><td><span class="chip dani">דני</span> <span class="chip ori">אורי</span></td><td class="when">בהמשך</td></tr>
-  <tr><td class="num">7</td><td>בוט ידע: צילום מסך – 3 דוגמאות תשובה</td><td><span class="chip dani">דני</span></td><td class="when">בהמשך</td></tr>
-  <tr><td class="num">8</td><td>סיכום הישיבה ושליחה לצוות</td><td><span class="chip dani">דני</span></td><td class="when">מיד</td></tr>
-  <tr><td class="num">9</td><td>כרטסת: גיל, גובה, משקל התחלתי. להמשיך לפתח כשלד לפרויקט פנימי</td><td><span class="chip ori">אורי</span></td><td class="when">בהמשך</td></tr>
-  <tr><td class="num">10</td><td>ניהול משימות: חיבור ל-WhatsApp ולאוטופיט</td><td><span class="chip ori">אורי</span> <span class="chip dani">דני</span></td><td class="when">בהמשך</td></tr>
-  <tr><td class="num">11</td><td>לשבת על עומר ביטון עד שיענה על התוכניות</td><td><span class="chip ori">אורי</span></td><td class="when">היום</td></tr>
-  <tr><td class="num">12</td><td>לקבוע שעת סגירת צ'אטים קבועה ולהודיע לסביבה</td><td><span class="chip ori">אורי</span></td><td class="when">מיד</td></tr>
-  <tr><td class="num">13</td><td>לעבור על בדיקות הדם של נמרוד</td><td><span class="chip dani">דני</span></td><td class="when">להוסיף למשימות</td></tr>
-  <tr><td class="num">14</td><td>מנטורינג לאורי, כל השאלות עוברות דרכו</td><td><span class="chip ron">רון</span></td><td class="when">שוטף</td></tr>
-  <tr><td class="num">15</td><td>להתחיל להיכנס למעקב אימונים</td><td><span class="chip all">כולם</span></td><td class="when">השבוע</td></tr>
-</table>
-
-<h2><span class="n">07</span>לו"ז ומידע נוסף</h2>
+<h3>מה עלה</h3>
 <ul>
-  <li><b>ישיבה הבאה: יום ראשון, 9:00–9:30, במשרד.</b> אורי מגיע בסביבות 14:00. איש המכירות מגיע בבוקר. יום אינטנסיבי.</li>
-  <li><b>השבוע הבא הוא השבוע לפני החגים.</b> לצפות להרבה מתאמנים חדשים.</li>
-  <li><b>ב-11 לחודש</b> עולה סרטון של דני על מבצע "חודש פלוס חודש". צפי ל-2–3 סגירות לפחות ביום ראשון.</li>
-  <li>בקשת שיחה עם דני אמורה לקרות מקסימום פעמיים בחודש.</li>
+  <li><b>שימוש באפליקציה:</b> יש מתאמנים שלא נכנסים, לא ממלאים משקלי עבודה, לא לוחצים התחל/סיים, ולא מעלים תמונות ביום מעקבים. הודעת המעקב מבקשת היקפים כל שבוע למרות שמודדים פעם בחודש.</li>
+  <li><b>כלים:</b> האוטופיט לא נוח בטלפון. גיל, גובה ומשקל התחלתי לא נגישים בלי להיכנס לשאלון. משלמים אלפי שקלים בשנה על מנויים שאפשר לפתח בעצמנו.</li>
+  <li><b>מענה:</b> אין שעות מענה מוגדרות. שלושה מתאמנים חדשים של אורי ביקשו שיחה עם דני בגלל היעלמות של כ-20 דקות. אצל רון ודני אפס בקשות.</li>
+  <li><b>תקשורת פנימית:</b> דברים נופלים בין הכיסאות (בדיקות הדם של נמרוד), ודני מוציא את רון מריכוז בלידים.</li>
 </ul>
 
-<div class="keep"><h3>משפטים לזכור</h3>
-<div class="quotes">
-  <div class="q">"48 שעות זה המינימום."</div>
-  <div class="q">"אין הזדמנות שנייה לרושם ראשוני."</div>
-  <div class="q">"אם אפשר לענות עכשיו, תוריד את זה מהראש. זה לוקח דקה."</div>
-  <div class="q">"מילה של רון כמו מילה שלי."</div>
+<h3>מה הוצג</h3>
+<ul>
+  <li><b>אורי</b> הציג כרטסת מתאמן (ניטרלי, תפריט מחושב, הערות ופתקים) ומערכת ניהול משימות עם שגרה יומית והיסטוריה.</li>
+  <li><b>דני</b> הציג דשבורד סטטיסטיקות: זמן מענה לכל מאמן, שעות אונליין, סרטוני טכניקה, ושביעות רצון מניתוח השיחות (52 מרוצים, 22 מעורבים, 3 לא מרוצים).</li>
+</ul>
+
+<h3>מה הוחלט</h3>
+<ul>
+  <li>דני בונה אוטומציות התראה (עם קלוד) ופאנל ניהול מרכזי בענן שמאחד את כל המערכות.</li>
+  <li>אורי ממשיך לפתח את הכרטסת וניהול המשימות כשלד לפרויקט פנימי.</li>
+  <li>כל אחד מקבל לו"ז יומי, וכל אחד יכול להוסיף משימה לשני. אין יותר בקשות בצ'אט שנשכחות.</li>
+  <li>רון מוצמד לאורי כמנטור. מילה של רון כמו מילה של דני.</li>
+  <li>שעת סגירת צ'אטים קבועה לכל מאמן, ורצף שיחה מלא עם מתאמנים חדשים בשבועיים הראשונים.</li>
+</ul>
+<div class="note">הסיכום מבוסס על תמלול אוטומטי של הקלטת הפגישה. שמות של מתאמנים עלולים להיות משובשים.</div>
+
+<div class="keep" style="margin-top:8pt">
+<h3>משפטים לזכור</h3>
+<div class="quotes"><div class="q">"48 שעות זה המינימום."</div>
+<div class="q">"אין הזדמנות שנייה לרושם ראשוני."</div>
+<div class="q">"אם אפשר לענות עכשיו, תוריד את זה מהראש. זה לוקח דקה."</div>
+<div class="q">"מילה של רון כמו מילה שלי."</div></div>
 </div>
 
-<footer>סוכם מתוך הקלטת ישיבת הצוות מ-4.9.2026.</footer></div>
+<h2 class="pb dani"><span class="chip dani">דני</span> משימות</h2>
+<table>
+  <tr><th class="num">#</th><th>משימה</th><th>פירוט</th><th>מתי</th></tr>
+  <tr><td class="num">1</td><td class="t">התראה: מתאמן לא נכנס לאפליקציה</td><td>כל 48 שעות בלי כניסה – הודעה למתאמן או התראה לקבוצת המאמנים. 48 שעות זה המינימום.</td><td class="when">השבוע</td></tr>
+  <tr><td class="num">2</td><td class="t">התראה: משקלי עבודה</td><td>סריקה כל 2–3 ימים. לא מילא משקל, טעה בחזרות, לא לחץ התחל/סיים – התראה למאמן.</td><td class="when">השבוע</td></tr>
+  <tr><td class="num">3</td><td class="t">התראה: תמונות יום מעקבים</td><td>חמישי / שישי / שבת בערב – רשימה של מי שלא העלה תמונות.</td><td class="when">השבוע</td></tr>
+  <tr><td class="num">4</td><td class="t">הודעת מעקב: היקפים</td><td>הבקשה להיקפים תופיע רק בשבוע האחרון בחודש, לא כל שבוע.</td><td class="when">השבוע</td></tr>
+  <tr><td class="num">5</td><td class="t">פאנל ניהול מרכזי</td><td>Web app בענן (כ-100 דולר), נפתח כאפליקציה בטלפון. מסך אחד: כרטסת, סטטיסטיקות, תזכורות, סיכומי שיחה, לו"ז. מבנה מודולרי: הפאנל מפנה למערכות נפרדות, כדי שנפילה של אחת לא תפיל את כולן.</td><td class="when">בהמשך</td></tr>
+  <tr><td class="num">6</td><td class="t">לו"ז יומי משותף</td><td>על בסיס ניהול המשימות של אורי: לו"ז לכל אחד, אפשרות להוסיף משימה לשני, סימון וי עם פירוט. חיבור לוג השיחות וה-CRM של רון (כמה שיחות, מי, פולו-אפים).</td><td class="when">בהמשך</td></tr>
+  <tr><td class="num">7</td><td class="t">בוט ידע</td><td>שילוב הבוט הקיים (עונה על 42% מההודעות): מעלים צילום מסך של שיחה ומקבלים 3 דוגמאות תשובה לבחירה. חיפוש לפי מילת מפתח ("רוצה לבטל", "מינון קריאטין").</td><td class="when">בהמשך</td></tr>
+  <tr><td class="num">8</td><td class="t">בדיקות הדם של נמרוד</td><td>לעבור עליהן ולענות לרון. מעכשיו דברים כאלה נכנסים למשימות של דני במקום "אענה בערב".</td><td class="when">מיד</td></tr>
+  <tr><td class="num">9</td><td class="t">סיכום ישיבה לצוות</td><td>שליחת הסיכום הזה.</td><td class="when">מיד</td></tr>
+  <tr><td class="num">10</td><td class="t">סרטון מבצע "חודש פלוס חודש"</td><td>עולה ב-11 לחודש. צפי ל-2–3 סגירות לפחות ביום ראשון.</td><td class="when">11 לחודש</td></tr>
+</table>
+<div class="box">
+  <h3>הרגלי עבודה</h3>
+  <ul>
+    <li>לא להוציא את רון מריכוז בלידים. שאלות תפעוליות עוברות דרך הלו"ז המשותף.</li>
+    <li>שעת סגירת צ'אטים: 22:00–22:15, ובבוקר בקימה.</li>
+  </ul>
+</div>
+
+<h2 class="pb ori"><span class="chip ori">אורי</span> משימות</h2>
+<table>
+  <tr><th class="num">#</th><th>משימה</th><th>פירוט</th><th>מתי</th></tr>
+  <tr><td class="num">1</td><td class="t">לשבת על עומר ביטון</td><td>קיבל תוכניות בעשר ולא ענה 3.5 שעות. "עומר, תעדכן", עד שעונה.</td><td class="when">היום</td></tr>
+  <tr><td class="num">2</td><td class="t">שעת סגירת צ'אטים קבועה</td><td>לקבוע שעה (למשל 22:00), להודיע לסביבה, ולעמוד בה. בין 19:00 ל-22:00 לא חייבים לענות אלא לנרשם חדש. בבוקר עוברים שוב על כולם.</td><td class="when">מיד</td></tr>
+  <tr><td class="num">3</td><td class="t">רצף שיחה עם חדשים</td><td>לא יותר מחצי שעה בלי מענה בשבועיים הראשונים. 20 דקות שקט: סמיילי או "יש לך שאלה?". חדשים לפני ותיקים תמיד.</td><td class="when">שוטף</td></tr>
+  <tr><td class="num">4</td><td class="t">ביקורת סרטונים כל ערב</td><td>כחלק מהצ'קליסט, לא לפי זיכרון. נשכח פעמיים השבוע.</td><td class="when">שוטף</td></tr>
+  <tr><td class="num">5</td><td class="t">שאלות לרון</td><td>כל שאלה מקצועית או תפעולית לרון, לא לדני. בשבוע הראשון בקבוצה, אחר כך בפרטי.</td><td class="when">שוטף</td></tr>
+  <tr><td class="num">6</td><td class="t">כרטסת מתאמן</td><td>להוסיף ליד השם: גיל, גובה, משקל התחלתי. להמשיך לפתח את הכרטסת כשלד לפרויקט הפנימי.</td><td class="when">בהמשך</td></tr>
+  <tr><td class="num">7</td><td class="t">ניהול משימות</td><td>חיבור ל-WhatsApp ולאוטופיט כדי שהסימון יהיה אוטומטי ויידע מתי הושלם. עובד עם דני על הלו"ז המשותף.</td><td class="when">בהמשך</td></tr>
+</table>
+<div class="box">
+  <h3>הרגלי עבודה</h3>
+  <ul>
+    <li>עונים בבלוקים, גג שעה. לא שעה שלמה בלילה לכל מי שקופץ.</li>
+    <li>אם אפשר לענות עכשיו, עונים. זה לוקח דקה-שתיים ושווה יותר כשהמתאמן בתחושה של הרגע.</li>
+    <li>עקביות בשעות יוצרת ביטחון אצל המתאמן. מי שנעלם פעם ב-19:00 ופעם ב-22:00 יוצר חרדה.</li>
+    <li>כשהתוכניות מתעכבות שולחים מסר יזום: "בוקר טוב, היום בערב אני שולח תוכניות, תהיה חזק."</li>
+  </ul>
+</div>
+
+<h2 class="pb ron"><span class="chip ron">רון</span> משימות</h2>
+<table>
+  <tr><th class="num">#</th><th>משימה</th><th>פירוט</th><th>מתי</th></tr>
+  <tr><td class="num">1</td><td class="t">מנטור לאורי</td><td>כל השאלות של אורי עוברות דרך רון. מענה מרוכז ומפורט, ולעבור על השיחות של אורי. מילה של רון כמו מילה של דני.</td><td class="when">שוטף</td></tr>
+  <tr><td class="num">2</td><td class="t">ריכוז בלידים ושיחות מכירה</td><td>זה המוקד. הפרעות תפעוליות עוברות ללו"ז המשותף.</td><td class="when">שוטף</td></tr>
+  <tr><td class="num">3</td><td class="t">לוג שיחות ל-CRM</td><td>לוודא שכל השיחות והפולו-אפים רשומים, כדי שדני יחבר אותם לפאנל.</td><td class="when">בהמשך</td></tr>
+</table>
+<div class="box">
+  <h3>השיטה של רון (הוצגה כדוגמה לכולם)</h3>
+  <ul>
+    <li>קם, סוגר צ'אטים, מתאמן בראש שקט, מגיע למשרד, סוגר צ'אטים שוב ומתחיל את היום.</li>
+    <li>בין הבלוקים מושך בשאלות קצרות: איך היה האימון, איך האנרגיה, איך הרגשת את התרגילים. תגובה על טכניקה מיד.</li>
+    <li>מתאמן חדש מקבל הודעה קצרה גם כשאין זמן לוותיקים.</li>
+  </ul>
+</div>
+
+<h2><span class="chip all">כולם</span> משימות כלליות וכללי עבודה</h2>
+<table>
+  <tr><th class="num">#</th><th>משימה</th><th>פירוט</th><th>מתי</th></tr>
+  <tr><td class="num">1</td><td class="t">מעקב אימונים</td><td>להתחיל להיכנס למעקב אימונים כשגרה.</td><td class="when">השבוע</td></tr>
+  <tr><td class="num">2</td><td class="t">ישיבה ביום ראשון</td><td>9:00–9:30 במשרד. אורי מגיע בסביבות 14:00. איש המכירות מגיע בבוקר. יום אינטנסיבי.</td><td class="when">יום ראשון</td></tr>
+  <tr><td class="num">3</td><td class="t">היערכות לחגים</td><td>השבוע הבא הוא השבוע לפני החגים. לצפות להרבה מתאמנים חדשים.</td><td class="when">השבוע הבא</td></tr>
+  <tr><td class="num">4</td><td class="t">מעבר ללו"ז המשותף</td><td>כל בקשה מחבר צוות נכנסת כמשימה בלו"ז שלו, לא בצ'אט. המבצע מסמן וי וכותב פירוט.</td><td class="when">כשמוכן</td></tr>
+</table>
+
+<div class="two">
+  <div class="box">
+    <h3>מתאמנים חדשים</h3>
+    <ul>
+      <li>שבוע ראשון הכי קריטי, שבוע שני קריטי, בשבוע השלישי כולם נרגעים.</li>
+      <li>רצף שיחה מלא: לא יותר מחצי שעה בלי מענה.</li>
+      <li>שיחת המכירה לוחצת. הרגש חייב להישאר יציב אחרי הסגירה.</li>
+      <li>אין הזדמנות שנייה לרושם ראשוני.</li>
+    </ul>
+  </div>
+  <div class="box">
+    <h3>שגרת מענה</h3>
+    <ul>
+      <li>שעת סגירת צ'אטים קבועה לכל מאמן, ומודיעים לסביבה.</li>
+      <li>עונים בבלוקים, גג שעה.</li>
+      <li>אם אפשר לענות עכשיו, עונים.</li>
+      <li>ביקורת סרטונים כל ערב לפי צ'קליסט.</li>
+    </ul>
+  </div>
+</div>
+
+
+</div>
 </body>
 </html>
