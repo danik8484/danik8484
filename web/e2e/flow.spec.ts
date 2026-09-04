@@ -53,7 +53,7 @@ test.describe.serial("daily schedule flow", () => {
     await expect(page.getByLabel("עובד")).toHaveValue("3");
     await page.getByRole("button", { name: "הוספה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.daniForUriS)).toBeVisible();
-    await expect(page.getByTestId("card-3").getByText("מאת דני שקנבסקי").first()).toBeVisible();
+    await expect(page.getByTestId("card-3").getByText("(דני ש.)").first()).toBeVisible();
 
     // Task for self via the floating button
     await page.getByRole("button", { name: "הוספת משימה", exact: true }).click();

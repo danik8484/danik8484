@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import type { TaskStatus } from "@shared/types";
-import { STATUS_LABEL } from "../format";
+import { STATUS_LABEL, personColor, shortName } from "../format";
 
 export function Button({
   children,
@@ -106,4 +106,9 @@ export function Spinner() {
 
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="py-6 text-center text-sm text-slate-500">{children}</p>;
+}
+
+/** "(דני ש.)" in that person's colour, for showing who added a task. */
+export function PersonTag({ userId, users }: { userId: number; users: { id: number; name: string }[] }) {
+  return <span className={`font-bold ${personColor(userId, users)}`}>({shortName(userId, users)})</span>;
 }

@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { PublicUser, Task } from "@shared/types";
 import { api } from "../api";
 import { useSession } from "../state";
-import { Button, ErrorText, Modal, Spinner, StatusIcon } from "../components/ui";
+import { Button, ErrorText, Modal, PersonTag, Spinner, StatusIcon } from "../components/ui";
 import TaskForm from "../components/TaskForm";
 import TaskSheet from "../components/TaskSheet";
 import { ROLE_LABEL, addDays, daysBetween, fmtDateLong, fmtDateShort, isoValid } from "../format";
@@ -157,7 +157,7 @@ export default function Board() {
                   <span className="min-w-0 flex-1">
                     <span className={`block truncate text-sm font-semibold ${t.status === "done" ? "text-slate-400 line-through" : "text-ink-900"}`}>{t.title}</span>
                     <span className="block text-xs text-slate-500">
-                      ל{s.nameOf(t.assigneeId)} · {fmtDateShort(t.dueDate)}
+                      ל<PersonTag userId={t.assigneeId} users={s.users} /> · {fmtDateShort(t.dueDate)}
                       {t.status === "in_progress" && t.progressNote && <span className="text-amber-800"> · {t.progressNote}</span>}
                     </span>
                   </span>
@@ -183,7 +183,7 @@ export default function Board() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-ink-900">{t.title}</span>
                       <span className="block text-xs text-slate-500">
-                        {s.nameOf(t.assigneeId)} · {fmtDateShort(t.dueDate)}
+                        <PersonTag userId={t.assigneeId} users={s.users} /> · {fmtDateShort(t.dueDate)}
                       </span>
                     </span>
                   </button>
@@ -362,7 +362,7 @@ function GroupHeader({ children, className = "" }: { children: React.ReactNode; 
 function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onOpen: (id: number) => void }) {
   const s = useSession();
   const overdue = task.status !== "done" ? daysBetween(task.dueDate, viewDate) : 0;
-  const creator = task.createdById !== task.assigneeId ? s.nameOf(task.createdById) : null;
+  const byOther = task.createdById !== task.assigneeId;
   return (
     <li>
       <button onClick={() => onOpen(task.id)} className="flex w-full items-start gap-3 rounded-xl px-2 py-2.5 text-start hover:bg-slate-50" data-testid={`task-${task.id}`}>
@@ -370,10 +370,17 @@ function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onO
           <StatusIcon status={task.status} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className={`block text-sm font-semibold ${task.status === "done" ? "text-slate-400 line-through" : "text-ink-900"}`}>{task.title}</span>
+          <span className={`block text-sm font-semibold ${task.status === "done" ? "text-slate-400 line-through" : "text-ink-900"}`}>
+            {task.title}
+            {byOther && (
+              <>
+                {" "}
+                <PersonTag userId={task.createdById} users={s.users} />
+              </>
+            )}
+          </span>
           {task.status === "in_progress" && task.progressNote && <span className="mt-0.5 line-clamp-2 block text-xs text-amber-800">{task.progressNote}</span>}
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-            {creator && <span>מאת {creator}</span>}
             {task.recurringId && <span className="text-sky-700">קבועה</span>}
             {overdue > 0 && <span className="font-semibold text-red-600">נגררת {overdue} ימים</span>}
             {task.status === "done" && task.completedAt && <span className="text-brand-700">הושלם {new Date(task.completedAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>}

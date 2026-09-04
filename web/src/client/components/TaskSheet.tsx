@@ -3,7 +3,7 @@ import type { Task, TaskEvent, TaskStatus } from "@shared/types";
 import { canEditOrDelete, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
-import { Button, ErrorText, Modal, Spinner, StatusBadge, inputCls } from "./ui";
+import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
 import TaskForm from "./TaskForm";
 import { STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime } from "../format";
 
@@ -137,7 +137,15 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                 <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">נגררת {daysBetween(task.dueDate, viewDate)} ימים</span>
               )}
             </div>
-            <h3 className="mt-2 text-xl font-bold text-ink-900">{task.title}</h3>
+            <h3 className="mt-2 text-xl font-bold text-ink-900">
+              {task.title}
+              {task.createdById !== task.assigneeId && (
+                <>
+                  {" "}
+                  <PersonTag userId={task.createdById} users={s.users} />
+                </>
+              )}
+            </h3>
             {task.details && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{task.details}</p>}
             <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
               <dt>עובד</dt>

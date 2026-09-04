@@ -57,3 +57,31 @@ export function fmtWeekdays(days: number[]): string {
 export function isoValid(s: string | null | undefined): s is string {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + "T00:00:00"));
 }
+
+/** Stable per-person colour classes (index by position in the team list). */
+const PERSON_COLORS = [
+  "text-blue-700",
+  "text-violet-700",
+  "text-teal-700",
+  "text-orange-700",
+  "text-pink-700",
+  "text-cyan-700",
+  "text-lime-700",
+  "text-rose-700",
+  "text-indigo-700",
+  "text-amber-700",
+];
+
+export function personColor(userId: number, all: { id: number }[]): string {
+  const idx = [...all].sort((a, b) => a.id - b.id).findIndex((u) => u.id === userId);
+  return PERSON_COLORS[(idx >= 0 ? idx : userId) % PERSON_COLORS.length];
+}
+
+/** First name; adds the surname initial when another teammate shares the first name. */
+export function shortName(userId: number, all: { id: number; name: string }[]): string {
+  const u = all.find((x) => x.id === userId);
+  if (!u) return "";
+  const [first, ...rest] = u.name.trim().split(/\s+/);
+  const clash = all.some((x) => x.id !== userId && x.name.trim().split(/\s+/)[0] === first);
+  return clash && rest.length > 0 ? `${first} ${rest[0][0]}.` : first;
+}
