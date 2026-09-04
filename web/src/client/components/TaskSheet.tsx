@@ -1,0 +1,250 @@
+import { useCallback, useEffect, useState } from "react";
+import type { Task, TaskEvent, TaskStatus } from "@shared/types";
+import { canEditOrDelete } from "@shared/permissions";
+import { api } from "../api";
+import { useSession } from "../state";
+import { Button, ErrorText, Modal, Spinner, StatusBadge, inputCls } from "./ui";
+import TaskForm from "./TaskForm";
+import { STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime } from "../format";
+
+interface Props {
+  taskId: number | null;
+  viewDate: string;
+  onClose: () => void;
+  onChanged: () => void;
+}
+
+export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Props) {
+  const s = useSession();
+  const [task, setTask] = useState<Task | null>(null);
+  const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [status, setStatus] = useState<TaskStatus>("open");
+  const [note, setNote] = useState("");
+  const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    if (taskId === null) return;
+    const res = await api.task(taskId);
+    setTask(res.task);
+    setEvents(res.events);
+    setStatus(res.task.status);
+    setNote(res.task.status === "in_progress" ? res.task.progressNote : "");
+  }, [taskId]);
+
+  useEffect(() => {
+    setTask(null);
+    setMode("view");
+    setError("");
+    setReason("");
+    load().catch((e) => setError((e as Error).message));
+  }, [load]);
+
+  const editable = task ? canEditOrDelete(s.user, task, s.users) : false;
+  const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") : false;
+
+  async function saveStatus() {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.setStatus(task.id, status, note);
+      await load();
+      setNote(status === "in_progress" ? note : "");
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doDelete() {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.deleteTask(task.id, reason);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const title = mode === "edit" ? "עריכת משימה" : mode === "delete" ? "מחיקת משימה" : "פרטי משימה";
+
+  return (
+    <Modal open={taskId !== null} onClose={onClose} title={title}>
+      {!task ? (
+        error ? <ErrorText>{error}</ErrorText> : <Spinner />
+      ) : mode === "edit" ? (
+        <TaskForm
+          defaultAssigneeId={task.assigneeId}
+          defaultDate={viewDate}
+          existing={task}
+          onCancel={() => setMode("view")}
+          onSaved={async () => {
+            await load();
+            setMode("view");
+            onChanged();
+          }}
+        />
+      ) : mode === "delete" ? (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-700">
+            המשימה <b>{task.title}</b> תימחק. המחיקה נרשמת ביומן הפעילות יחד עם הסיבה.
+          </p>
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-ink-700">סיבת המחיקה (חובה)</span>
+            <textarea className={inputCls} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
+          </label>
+          <ErrorText>{error}</ErrorText>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setMode("view")}>ביטול</Button>
+            <Button variant="danger" onClick={doDelete} disabled={busy || reason.trim().length < 2}>
+              {busy ? "מוחק..." : "מחיקה"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {task.deletedAt && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <b>המשימה נמחקה</b> על ידי {s.nameOf(task.deletedById)} ב-{fmtDateTime(task.deletedAt)}.
+              <br />
+              סיבה: {task.deleteReason}
+            </div>
+          )}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={task.status} />
+              {task.recurringId && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">משימה קבועה</span>}
+              {task.status !== "done" && daysBetween(task.dueDate, viewDate) > 0 && (
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">נגררת {daysBetween(task.dueDate, viewDate)} ימים</span>
+              )}
+            </div>
+            <h3 className="mt-2 text-xl font-bold text-ink-900">{task.title}</h3>
+            {task.details && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{task.details}</p>}
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
+              <dt>עובד</dt>
+              <dd className="font-semibold text-ink-700">{s.nameOf(task.assigneeId)}</dd>
+              <dt>נוסף על ידי</dt>
+              <dd className="font-semibold text-ink-700">
+                {s.nameOf(task.createdById)} · {fmtDateTime(task.createdAt)}
+              </dd>
+              <dt>תאריך יעד</dt>
+              <dd className="font-semibold text-ink-700">{fmtDateShort(task.dueDate)}</dd>
+              {task.completedAt && (
+                <>
+                  <dt>הושלם</dt>
+                  <dd className="font-semibold text-brand-700">
+                    {s.nameOf(task.completedById)} · {fmtDateTime(task.completedAt)}
+                  </dd>
+                </>
+              )}
+            </dl>
+            {task.status === "in_progress" && task.progressNote && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+                <span className="block text-xs font-semibold text-amber-800">מה בוצע ומה נשאר</span>
+                <p className="mt-0.5 whitespace-pre-wrap text-amber-900">{task.progressNote}</p>
+              </div>
+            )}
+          </div>
+
+          {!task.deletedAt && (
+            <div className="rounded-xl border border-slate-200 p-3">
+              <span className="mb-2 block text-sm font-semibold text-ink-700">עדכון סטטוס</span>
+              <div className="grid grid-cols-3 gap-1.5" role="radiogroup">
+                {(["open", "in_progress", "done"] as TaskStatus[]).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    role="radio"
+                    aria-checked={status === st}
+                    onClick={() => setStatus(st)}
+                    className={`rounded-lg border px-2 py-2 text-sm font-semibold ${
+                      status === st
+                        ? st === "done"
+                          ? "border-brand-600 bg-brand-600 text-white"
+                          : st === "in_progress"
+                            ? "border-amber-500 bg-amber-500 text-white"
+                            : "border-slate-600 bg-slate-600 text-white"
+                        : "border-slate-300 bg-white text-ink-700"
+                    }`}
+                  >
+                    {STATUS_LABEL[st]}
+                  </button>
+                ))}
+              </div>
+              <label className="mt-3 block">
+                <span className="mb-1 block text-sm font-semibold text-ink-700">
+                  {status === "in_progress" ? "מה בוצע ומה נשאר? (חובה)" : status === "done" ? "הערת סיום (לא חובה)" : "הערה (לא חובה)"}
+                </span>
+                <textarea
+                  className={inputCls}
+                  rows={3}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={status === "in_progress" ? "למשל: דיברתי עם 3 מתוך 5 לידים, נשארו 2 למחר" : ""}
+                />
+              </label>
+              <ErrorText>{error}</ErrorText>
+              <div className="mt-3 flex justify-end">
+                <Button onClick={saveStatus} disabled={busy || !statusDirty || (status === "in_progress" && !note.trim())}>
+                  {busy ? "שומר..." : "שמירת עדכון"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <span className="mb-2 block text-sm font-semibold text-ink-700">היסטוריה</span>
+            <ol className="space-y-2 border-s-2 border-slate-200 ps-3">
+              {events.map((ev) => (
+                <li key={ev.id} className="text-xs">
+                  <span className="text-slate-500">{fmtDateTime(ev.createdAt)}</span>
+                  <span className="mx-1 text-slate-400">·</span>
+                  <b className="text-ink-800">{s.nameOf(ev.actorId)}</b>
+                  <span className="mx-1 text-slate-400">·</span>
+                  <span className="text-ink-700">{eventText(ev)}</span>
+                  {ev.note && <p className="mt-0.5 whitespace-pre-wrap rounded-lg bg-slate-50 px-2 py-1 text-slate-700">{ev.note}</p>}
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {!task.deletedAt && editable && (
+            <div className="flex justify-between gap-2 border-t border-slate-200 pt-3">
+              <Button variant="danger" onClick={() => setMode("delete")}>מחיקה</Button>
+              <Button variant="secondary" onClick={() => setMode("edit")}>עריכה</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+export function eventText(ev: TaskEvent): string {
+  switch (ev.type) {
+    case "created":
+      return "נוצרה";
+    case "status":
+      return `${STATUS_LABEL[ev.fromStatus ?? "open"]} ← ${STATUS_LABEL[ev.toStatus ?? "open"]}`;
+    case "note":
+      return "עדכון פירוט";
+    case "edited":
+      return "נערכה";
+    case "reassigned":
+      return "הועברה";
+    case "deleted":
+      return "נמחקה";
+    default:
+      return ev.type;
+  }
+}

@@ -1,0 +1,7 @@
+# העתק לקובץ בשם .dev.vars להרצה מקומית
+APP_ENV=development
+ADMIN_EMAIL=dani@example.com
+# בפיתוח מקומי הקוד מודפס ללוג ולא נשלח במייל. לשליחה אמיתית:
+# BREVO_API_KEY=xkeysib-...
+# MAIL_FROM=you@yourcompany.com
+# MAIL_FROM_NAME=לו"ז יומי
