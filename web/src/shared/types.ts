@@ -1,5 +1,6 @@
 export type Role = "admin" | "manager" | "employee";
 export type TaskStatus = "open" | "in_progress" | "done";
+export type TaskKind = "normal" | "leads";
 export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed";
 
 export interface PublicUser {
@@ -25,6 +26,9 @@ export interface Task {
   completedDate: string | null;
   completedById: number | null;
   recurringId: number | null;
+  kind: TaskKind;
+  metricDeals: number | null;
+  metricCalls: number | null;
   createdDate: string;
   createdAt: string;
   updatedAt: string;
@@ -65,6 +69,7 @@ export interface RecurringTask {
   createdById: number;
   weekdays: number[]; // 0 = Sunday
   startDate: string;
+  kind: TaskKind;
   active: boolean;
   createdAt: string;
 }

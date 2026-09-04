@@ -10,4 +10,7 @@ export interface Env {
   MAIL_FROM?: string;
   MAIL_FROM_NAME?: string;
   BOOTSTRAP_ADMIN_LINK_HASH?: string;
+  VAPID_SUBJECT?: string;
+  APP_URL?: string; // public URL used in notification links
+  REMINDER_TIME?: string; // HH:MM local, default 20:00
 }

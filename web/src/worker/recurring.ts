@@ -38,6 +38,7 @@ export async function materializeRecurring(db: Db, today: string, force = false)
         createdById: r.createdById,
         dueDate: today,
         recurringId: r.id,
+        kind: r.kind,
         createdDate: today,
       })
       .onConflictDoNothing()

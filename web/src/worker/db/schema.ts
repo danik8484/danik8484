@@ -11,6 +11,7 @@ export const users = sqliteTable("users", {
   managerId: integer("manager_id"),
   sortOrder: integer("sort_order").notNull().default(0),
   active: integer("active").notNull().default(1),
+  reminderSentDate: text("reminder_sent_date"),
   createdAt: text("created_at").notNull().default(nowIso),
 });
 
@@ -47,6 +48,7 @@ export const recurringTasks = sqliteTable("recurring_tasks", {
   createdById: integer("created_by_id").notNull(),
   weekdays: text("weekdays").notNull(),
   startDate: text("start_date").notNull(),
+  kind: text("kind", { enum: ["normal", "leads"] }).notNull().default("normal"),
   active: integer("active").notNull().default(1),
   deletedAt: text("deleted_at"),
   deletedById: integer("deleted_by_id"),
@@ -69,6 +71,9 @@ export const tasks = sqliteTable(
     completedDate: text("completed_date"),
     completedById: integer("completed_by_id"),
     recurringId: integer("recurring_id"),
+    kind: text("kind", { enum: ["normal", "leads"] }).notNull().default("normal"),
+    metricDeals: integer("metric_deals"),
+    metricCalls: integer("metric_calls"),
     deletedAt: text("deleted_at"),
     deletedById: integer("deleted_by_id"),
     deleteReason: text("delete_reason"),
@@ -137,3 +142,32 @@ export const taskAttachments = sqliteTable(
   (t) => [index("task_attachments_task_idx").on(t.taskId)],
 );
 export type AttachmentRow = typeof taskAttachments.$inferSelect;
+
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id").notNull(),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent").notNull().default(""),
+    failures: integer("failures").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull().default(nowIso),
+  },
+  (t) => [index("push_subscriptions_user_idx").on(t.userId)],
+);
+
+export const notificationQueue = sqliteTable(
+  "notification_queue",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id").notNull(),
+    actorId: integer("actor_id").notNull(),
+    taskId: integer("task_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    sentAt: integer("sent_at"),
+  },
+  (t) => [index("notification_queue_pending_idx").on(t.sentAt, t.userId)],
+);

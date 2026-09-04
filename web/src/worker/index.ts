@@ -10,6 +10,8 @@ import { taskRoutes, logRoutes } from "./routes/tasks";
 import { recurringRoutes } from "./routes/recurring";
 import { userRoutes } from "./routes/users";
 import { photoRoutes } from "./routes/photos";
+import { pushRoutes } from "./routes/push";
+import { flushDigests, sendDayEndReminders } from "./notify";
 import type { MeResponse } from "@shared/types";
 import type { Env } from "./env";
 import { materializeRecurring } from "./recurring";
@@ -59,13 +61,24 @@ app.route("/api/log", logRoutes);
 app.route("/api/recurring", recurringRoutes);
 app.route("/api/users", userRoutes);
 app.route("/api", photoRoutes);
+app.route("/api/push", pushRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "לא נמצא" }, 404));
 
+export async function runScheduled(env: Env, force = false): Promise<{ created: number; digests: number; reminders: number }> {
+  await ensureSchema(env);
+  const db = getDb(env.DB);
+  const appUrl = env.APP_URL || "";
+  const created = await materializeRecurring(db, localDate(env.TIMEZONE));
+  const digests = await flushDigests(env, db, appUrl, Date.now(), force);
+  const reminders = await sendDayEndReminders(env, db, appUrl);
+  return { created, digests, reminders };
+}
+
 export default {
   fetch: app.fetch,
-  /** Nightly: create today's recurring tasks even if nobody opened the app. */
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(ensureSchema(env).then(() => materializeRecurring(getDb(env.DB), localDate(env.TIMEZONE))));
+  /** Every 5 minutes: today's recurring tasks, batched "new task" notifications, end-of-day reminders. */
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduled(env, event.cron === "force" && env.APP_ENV === "development"));
   },
 };

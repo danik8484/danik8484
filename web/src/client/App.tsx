@@ -9,6 +9,7 @@ import Board from "./pages/Board";
 import Recurring from "./pages/Recurring";
 import Log from "./pages/Log";
 import Users from "./pages/Users";
+import { PushToggle } from "./components/PushSettings";
 
 export default function App() {
   const [me, setMe] = useState<MeResponse | null | undefined>(undefined);
@@ -101,6 +102,9 @@ function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: (
               </nav>
               <div className="flex items-center gap-2">
                 <span className="hidden text-sm text-slate-300 sm:inline">{session.user.name}</span>
+                <div className="hidden sm:block">
+                  <PushToggle />
+                </div>
                 <button
                   onClick={() => session.logout()}
                   className="hidden rounded-lg px-2 py-1.5 text-xs text-slate-300 hover:bg-white/10 hover:text-white sm:inline"
@@ -126,6 +130,7 @@ function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: (
                       {l.label}
                     </NavLink>
                   ))}
+                  <PushToggle />
                   <button onClick={() => session.logout()} className="rounded-lg px-3 py-2 text-start text-sm font-semibold text-red-300 hover:bg-white/10">
                     יציאה
                   </button>

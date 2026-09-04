@@ -25,6 +25,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
   const [dueDate, setDueDate] = useState(existing?.dueDate ?? defaultDate);
   const [recurring, setRecurring] = useState(forceRecurring);
   const [weekdays, setWeekdays] = useState<number[]>([0, 1, 2, 3, 4]);
+  const [leads, setLeads] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -41,7 +42,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
         await api.updateTask(existing.id, { title, details, dueDate, assigneeId });
       } else {
         if (recurring && weekdays.length === 0) throw new Error("יש לבחור לפחות יום אחד");
-        await api.createTask({ title, details, assigneeId, dueDate, weekdays: recurring ? weekdays : [] });
+        await api.createTask({ title, details, assigneeId, dueDate, weekdays: recurring ? weekdays : [], kind: recurring && leads ? "leads" : "normal" });
       }
       onSaved();
     } catch (err) {
@@ -101,6 +102,12 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
             משימה קבועה (חוזרת כל שבוע)
           </label>
           {!s.canSee(assigneeId) && <p className="mt-1 text-xs text-slate-500">משימה קבועה אפשר להגדיר רק לעצמך או לעובדים שאתה מנהל.</p>}
+          {recurring && (
+            <label className="mt-3 flex items-center gap-2 text-sm text-ink-700">
+              <input type="checkbox" className="size-4 accent-brand-600" checked={leads} onChange={(e) => setLeads(e.target.checked)} />
+              משימת לידים (בעדכון אפשר לרשום כמות נסלקים ושיחות)
+            </label>
+          )}
           {recurring && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {WEEKDAYS_SHORT.map((label, d) => (

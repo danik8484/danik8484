@@ -53,6 +53,7 @@ recurringRoutes.patch("/:id", async (c) => {
     patch.weekdays = wds.join(",");
   }
   if (body.active !== undefined) patch.active = body.active ? 1 : 0;
+  if (body.kind !== undefined) patch.kind = body.kind === "leads" ? "leads" : "normal";
   await db.update(recurringTasks).set(patch).where(eq(recurringTasks.id, id)).run();
   const updated = await db.select().from(recurringTasks).where(eq(recurringTasks.id, id)).get();
   return c.json({ ok: true, recurring: toRecurring(updated!) });

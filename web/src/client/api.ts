@@ -29,11 +29,12 @@ export const api = {
   me: () => request<MeResponse>("GET", "/api/me"),
   board: (date: string) => request<BoardResponse>("GET", `/api/tasks/board?date=${date}`),
   task: (id: number) => request<TaskDetailResponse>("GET", `/api/tasks/${id}`),
-  createTask: (input: { title: string; details: string; assigneeId: number; dueDate: string; weekdays?: number[] }) =>
+  createTask: (input: { title: string; details: string; assigneeId: number; dueDate: string; weekdays?: number[]; kind?: "normal" | "leads" }) =>
     request<{ ok: true; task?: Task; recurringId?: number }>("POST", "/api/tasks", input),
   updateTask: (id: number, input: { title?: string; details?: string; dueDate?: string; assigneeId?: number }) =>
     request<{ ok: true; task: Task }>("PATCH", `/api/tasks/${id}`, input),
-  setStatus: (id: number, status: TaskStatus, note: string) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/status`, { status, note }),
+  setStatus: (id: number, status: TaskStatus, note: string, metrics?: { metricDeals?: number | null; metricCalls?: number | null }) =>
+    request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/status`, { status, note, ...(metrics ?? {}) }),
   deleteTask: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/tasks/${id}`, { reason }),
   uploadPhoto: async (taskId: number, blob: Blob, name: string, width: number, height: number) => {
     const res = await fetch(`/api/tasks/${taskId}/photos`, {
@@ -51,9 +52,13 @@ export const api = {
     return data.attachment as Attachment;
   },
   deletePhoto: (id: number) => request<{ ok: true }>("DELETE", `/api/photos/${id}`),
+  pushConfig: () => request<{ publicKey: string; devices: number }>("GET", "/api/push/config"),
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => request<{ ok: true }>("POST", "/api/push/subscribe", sub),
+  pushUnsubscribe: (endpoint: string) => request<{ ok: true }>("POST", "/api/push/unsubscribe", { endpoint }),
+  pushTest: () => request<{ ok: true; delivered: number }>("POST", "/api/push/test"),
   log: (from: string, to: string) => request<{ from: string; to: string; entries: LogEntry[] }>("GET", `/api/log?from=${from}&to=${to}`),
   recurring: () => request<{ recurring: RecurringTask[] }>("GET", "/api/recurring"),
-  updateRecurring: (id: number, input: { title?: string; details?: string; weekdays?: number[]; active?: boolean }) =>
+  updateRecurring: (id: number, input: { title?: string; details?: string; weekdays?: number[]; active?: boolean; kind?: "normal" | "leads" }) =>
     request<{ ok: true; recurring: RecurringTask }>("PATCH", `/api/recurring/${id}`, input),
   deleteRecurring: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/recurring/${id}`, { reason }),
   users: () => request<{ users: PublicUser[] }>("GET", "/api/users"),

@@ -55,7 +55,10 @@ export default function Recurring() {
               <li key={r.id} className={`rounded-2xl bg-white p-3 shadow-sm ${r.active ? "" : "opacity-60"}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-sm font-bold text-ink-900">{r.title}</div>
+                    <div className="text-sm font-bold text-ink-900">
+                      {r.title}
+                      {r.kind === "leads" && <span className="ms-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">לידים</span>}
+                    </div>
                     {r.details && <div className="mt-0.5 whitespace-pre-wrap text-xs text-slate-600">{r.details}</div>}
                     <div className="mt-1 text-xs text-slate-500">
                       {s.nameOf(r.assigneeId)} · {fmtWeekdays(r.weekdays)} · נוסף ע"י {s.nameOf(r.createdById)}

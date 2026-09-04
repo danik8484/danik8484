@@ -6,6 +6,7 @@ import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusIcon } from "../components/ui";
 import TaskForm from "../components/TaskForm";
 import TaskSheet from "../components/TaskSheet";
+import { PushBanner } from "../components/PushSettings";
 import { ROLE_LABEL, addDays, daysBetween, fmtDateLong, fmtDateShort, isoValid } from "../format";
 import { taskTier } from "@shared/permissions";
 
@@ -107,6 +108,7 @@ export default function Board() {
         </button>
       </div>
 
+      <PushBanner />
       {tasks !== null && s.visibleUserIds.length > 1 && summary.total > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl bg-white px-3 py-2 text-xs shadow-sm" data-testid="summary">
           <span className="font-bold text-ink-800">סיכום היום</span>
@@ -383,6 +385,13 @@ function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onO
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
             {task.recurringId && <span className="text-sky-700">קבועה</span>}
             {!!task.photoCount && <span title="תמונות">📷 {task.photoCount}</span>}
+            {task.kind === "leads" && (task.metricDeals != null || task.metricCalls != null) && (
+              <span className="font-semibold text-emerald-700">
+                {task.metricDeals != null && `נסלקים: ${task.metricDeals}`}
+                {task.metricDeals != null && task.metricCalls != null && " · "}
+                {task.metricCalls != null && `שיחות: ${task.metricCalls}`}
+              </span>
+            )}
             {overdue > 0 && <span className="font-semibold text-red-600">נגררת {overdue} ימים</span>}
             {task.status === "done" && task.completedAt && <span className="text-brand-700">הושלם {new Date(task.completedAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>}
           </span>

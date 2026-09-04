@@ -6,7 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   // 22:05 UTC = 00:05 / 01:05 Israel time; 04:00 UTC is a safety re-run.
-  "triggers": { "crons": ["5 22 * * *", "0 4 * * *"] },
+  // Every 5 minutes: create today's recurring tasks, send batched "new task" notifications, end-of-day reminders.
+  "triggers": { "crons": ["*/5 * * * *"] },
   "assets": {
     "directory": "./dist/client",
     "binding": "ASSETS",
@@ -28,6 +29,9 @@
   "vars": {
     "APP_ENV": "production",
     "APP_NAME": "לו\"ז יומי",
-    "TIMEZONE": "Asia/Jerusalem"
+    "TIMEZONE": "Asia/Jerusalem",
+    "REMINDER_TIME": "20:00",
+    "APP_URL": "https://fitness-daily-tasks.planet-kicker.workers.dev",
+    "VAPID_SUBJECT": "mailto:admin@example.com"
   }
 }

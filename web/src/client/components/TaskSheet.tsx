@@ -25,6 +25,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const fileInput = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<TaskStatus>("open");
   const [note, setNote] = useState("");
+  const [deals, setDeals] = useState<string>("");
+  const [calls, setCalls] = useState<string>("");
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,6 +40,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setPhotos(res.attachments);
     setStatus(res.task.status);
     setNote(res.task.status === "in_progress" ? res.task.progressNote : "");
+    setDeals(res.task.metricDeals == null ? "" : String(res.task.metricDeals));
+    setCalls(res.task.metricCalls == null ? "" : String(res.task.metricCalls));
   }, [taskId]);
 
   useEffect(() => {
@@ -53,14 +57,15 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const canDone = task ? canMarkDone(s.user, task, s.users) : false;
   const noteRequired = task ? noteRequiredForInProgress(task) : true;
   const tier = task ? taskTier(task, s.users) : 1;
-  const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") : false;
+  const metricsDirty = task ? task.kind === "leads" && (deals !== (task.metricDeals == null ? "" : String(task.metricDeals)) || calls !== (task.metricCalls == null ? "" : String(task.metricCalls))) : false;
+  const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") || metricsDirty : false;
 
   async function saveStatus() {
     if (!task) return;
     setBusy(true);
     setError("");
     try {
-      await api.setStatus(task.id, status, note);
+      await api.setStatus(task.id, status, note, task.kind === "leads" ? { metricDeals: deals === "" ? null : Number(deals), metricCalls: calls === "" ? null : Number(calls) } : undefined);
       await load();
       setNote(status === "in_progress" ? note : "");
       onChanged();
@@ -172,6 +177,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
               {task.recurringId && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">משימה קבועה</span>}
               {tier === 0 && task.createdById !== task.assigneeId && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-xs font-semibold text-white">מההנהלה</span>}
               {tier === 2 && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">בקשה מעמית</span>}
+              {task.kind === "leads" && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">לידים</span>}
               {task.status !== "done" && daysBetween(task.dueDate, viewDate) > 0 && (
                 <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">נגררת {daysBetween(task.dueDate, viewDate)} ימים</span>
               )}
@@ -257,6 +263,18 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                   placeholder={status === "in_progress" ? "למשל: דיברתי עם 3 מתוך 5 לידים, נשארו 2 למחר" : ""}
                 />
               </label>
+              {task.kind === "leads" && (
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-ink-700">כמות נסלקים (לא חובה)</span>
+                    <input type="number" inputMode="numeric" min={0} className={inputCls} value={deals} onChange={(e) => setDeals(e.target.value)} data-testid="metric-deals" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-ink-700">כמות שיחות (לא חובה)</span>
+                    <input type="number" inputMode="numeric" min={0} className={inputCls} value={calls} onChange={(e) => setCalls(e.target.value)} data-testid="metric-calls" />
+                  </label>
+                </div>
+              )}
               <ErrorText>{error}</ErrorText>
               <div className="mt-3 flex justify-end">
                 <Button onClick={saveStatus} disabled={busy || !statusDirty || (status === "in_progress" && noteRequired && !note.trim())}>

@@ -4,6 +4,7 @@ import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
 import { listAttachments, photoCounts } from "./photos";
+import { queueTaskNotification } from "../notify";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
@@ -90,10 +91,11 @@ taskRoutes.post("/", async (c) => {
 
   const today = localDate(c.env.TIMEZONE);
 
+  const kind = body.kind === "leads" ? "leads" : "normal";
   if (wds.length > 0) {
     const rec = await db
       .insert(recurringTasks)
-      .values({ title, details, assigneeId, createdById: me.id, weekdays: wds.join(","), startDate: dueDate })
+      .values({ title, details, assigneeId, createdById: me.id, weekdays: wds.join(","), startDate: dueDate, kind })
       .returning()
       .get();
     // Create the first instance now if the start date is today and matches a selected weekday
@@ -105,10 +107,11 @@ taskRoutes.post("/", async (c) => {
 
   const row = await db
     .insert(tasks)
-    .values({ title, details, assigneeId, createdById: me.id, dueDate, createdDate: today })
+    .values({ title, details, assigneeId, createdById: me.id, dueDate, createdDate: today, kind })
     .returning()
     .get();
   await db.insert(taskEvents).values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open" }).run();
+  await queueTaskNotification(db, assigneeId, me.id, row.id);
   return c.json({ ok: true, task: toTask(row) }, 201);
 });
 
@@ -150,6 +153,18 @@ taskRoutes.post("/:id/status", async (c) => {
   const today = localDate(c.env.TIMEZONE);
   const changed = status !== row.status;
   const patch: Partial<typeof tasks.$inferInsert> = { updatedAt: now };
+  const metricNotes: string[] = [];
+  if (row.kind === "leads") {
+    for (const [field, key, label] of [["metricDeals", "metricDeals", "נסלקים"], ["metricCalls", "metricCalls", "שיחות"]] as const) {
+      if (body[key] === undefined) continue;
+      const v = body[key] === null || body[key] === "" ? null : int(body[key]);
+      if (v === undefined || (v !== null && (v < 0 || v > 100000))) return c.json({ error: "כמות לא תקינה" }, 400);
+      if (v !== row[field]) {
+        patch[field] = v;
+        metricNotes.push(`${label}: ${v ?? "–"}`);
+      }
+    }
+  }
   if (status === "in_progress") patch.progressNote = note;
   else if (note) patch.progressNote = note;
   if (status === "done") {
@@ -163,6 +178,7 @@ taskRoutes.post("/:id/status", async (c) => {
     patch.completedDate = null;
     patch.completedById = null;
   }
+  if (!changed && !note && metricNotes.length === 0 && patch.progressNote === undefined) return c.json({ ok: true, task: toTask(row) });
   await db.update(tasks).set(patch).where(eq(tasks.id, id)).run();
   await db
     .insert(taskEvents)
@@ -172,7 +188,7 @@ taskRoutes.post("/:id/status", async (c) => {
       type: changed ? "status" : "note",
       fromStatus: row.status,
       toStatus: status,
-      note: note ?? "",
+      note: [note ?? "", metricNotes.join(" · ")].filter(Boolean).join("\n"),
     })
     .run();
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
@@ -237,6 +253,7 @@ taskRoutes.patch("/:id", async (c) => {
     const from = c.get("team").find((u) => u.id === row.assigneeId)?.name ?? "";
     const to = c.get("team").find((u) => u.id === reassignedTo)?.name ?? "";
     await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "reassigned", note: `${from} ← ${to}` }).run();
+    await queueTaskNotification(db, reassignedTo, me.id, id);
   }
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
   return c.json({ ok: true, task: toTask(updated!) });

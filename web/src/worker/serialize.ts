@@ -27,6 +27,9 @@ export function toTask(t: TaskRow): Task {
     completedDate: t.completedDate,
     completedById: t.completedById,
     recurringId: t.recurringId,
+    kind: t.kind,
+    metricDeals: t.metricDeals,
+    metricCalls: t.metricCalls,
     createdDate: t.createdDate,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
@@ -61,6 +64,7 @@ export function toRecurring(r: RecurringRow): RecurringTask {
       .filter(Boolean)
       .map((n) => Number(n)),
     startDate: r.startDate,
+    kind: r.kind,
     active: r.active === 1,
     createdAt: r.createdAt,
   };
