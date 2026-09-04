@@ -35,6 +35,9 @@ app.use("/api/*", async (c, next) => {
 async function runScheduledIfDue(env: Env): Promise<void> {
   const db = getDb(env.DB);
   const now = Date.now();
+  // Cheap read first; only one request every 5 minutes proceeds to the atomic claim below.
+  const last = await db.select({ value: appMeta.value }).from(appMeta).where(eq(appMeta.key, "last_background_run")).get();
+  if (last && now - Number(last.value) < 5 * 60 * 1000) return;
   const claimed = await db
     .insert(appMeta)
     .values({ key: "last_background_run", value: String(now) })
