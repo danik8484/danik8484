@@ -6,7 +6,8 @@ import { toRecurring, toPublicUser } from "../serialize";
 import { visibleIdsFor } from "../team";
 import { canEditOrDelete, canManage } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
-import { nowIso } from "../dates";
+import { localDate, nowIso } from "../dates";
+import { materializeRecurring } from "../recurring";
 
 export const recurringRoutes = new Hono<AppEnv>();
 
@@ -56,6 +57,8 @@ recurringRoutes.patch("/:id", async (c) => {
   if (body.kind !== undefined) patch.kind = body.kind === "leads" ? "leads" : "normal";
   await db.update(recurringTasks).set(patch).where(eq(recurringTasks.id, id)).run();
   const updated = await db.select().from(recurringTasks).where(eq(recurringTasks.id, id)).get();
+  // If today became a scheduled day (or the task was re-activated), create today's instance right away
+  if (patch.weekdays !== undefined || patch.active === 1) await materializeRecurring(db, localDate(c.env.TIMEZONE), true);
   return c.json({ ok: true, recurring: toRecurring(updated!) });
 });
 

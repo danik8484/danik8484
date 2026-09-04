@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, asc } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, asc, sql } from "drizzle-orm";
 import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
@@ -8,7 +8,7 @@ import { queueTaskNotification } from "../notify";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
-import { canAssignTask, canEditOrDelete, canManage, canMarkDone, canOpenTask, noteRequiredForInProgress } from "@shared/permissions";
+import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import type { BoardResponse, TaskStatus } from "@shared/types";
 
@@ -26,10 +26,15 @@ taskRoutes.get("/board", async (c) => {
   await materializeRecurring(db, today);
 
   const visible = visibleIdsFor(me, team);
+  // A finished task stays on the board from its due date until the day it was completed, in either
+  // order (completed early or late), so a manager always gets to see it as done at least once.
+  const doneVisibleOn = (d: string) =>
+    sql`(${tasks.status} = 'done' AND min(${tasks.dueDate}, coalesce(${tasks.completedDate}, ${tasks.dueDate})) <= ${d} AND max(${tasks.dueDate}, coalesce(${tasks.completedDate}, ${tasks.dueDate})) >= ${d})`;
+  const notDone = or(eq(tasks.status, "open"), eq(tasks.status, "in_progress"));
   const sent = await db
     .select()
     .from(tasks)
-    .where(and(isNull(tasks.deletedAt), eq(tasks.createdById, me.id), notInArray(tasks.assigneeId, visible.length ? visible : [-1]), or(eq(tasks.status, "open"), eq(tasks.status, "in_progress"), gte(tasks.completedDate, date))))
+    .where(and(isNull(tasks.deletedAt), eq(tasks.createdById, me.id), notInArray(tasks.assigneeId, visible.length ? visible : [-1]), or(notDone, doneVisibleOn(date))))
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
     .all();
   if (visible.length === 0) return c.json<BoardResponse & { upcoming: [] }>({ date, tasks: [], upcoming: [], sent: sent.map(toTask) });
@@ -42,8 +47,7 @@ taskRoutes.get("/board", async (c) => {
         isNull(tasks.deletedAt),
         inArray(tasks.assigneeId, visible),
         lte(tasks.createdDate, date),
-        lte(tasks.dueDate, date),
-        or(eq(tasks.status, "open"), eq(tasks.status, "in_progress"), gte(tasks.completedDate, date)),
+        or(and(notDone, lte(tasks.dueDate, date)), doneVisibleOn(date)),
       ),
     )
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
@@ -58,7 +62,7 @@ taskRoutes.get("/board", async (c) => {
         inArray(tasks.assigneeId, visible),
         gt(tasks.dueDate, date),
         lte(tasks.createdDate, date),
-        or(eq(tasks.status, "open"), eq(tasks.status, "in_progress")),
+        notDone,
       ),
     )
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
@@ -142,8 +146,11 @@ taskRoutes.post("/:id/status", async (c) => {
   if (!row) return c.json({ error: "לא נמצא" }, 404);
   const mePublic = toPublicUser(me, false);
   if (!canManage(mePublic, row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
-  if (status === "done" && !canMarkDone(mePublic, row, c.get("teamPublic"))) {
-    return c.json({ error: "רק המנהל יכול לסמן 'הושלם' על משימה שניתנה על ידי מישהו אחר. סמן 'בתהליך' וכתוב מה בוצע." }, 403);
+  if (status !== row.status && !canChangeStatus(mePublic, row, status, c.get("teamPublic"))) {
+    return c.json(
+      { error: row.status === "done" ? "רק המנהל יכול לפתוח מחדש משימה שסומנה כהושלמה." : "רק המנהל יכול לסמן 'הושלם' על משימה שניתנה על ידי מישהו אחר. סמן 'בתהליך' וכתוב מה בוצע." },
+      403,
+    );
   }
   if (status === "in_progress" && !note && noteRequiredForInProgress(row)) {
     return c.json({ error: "כשמסמנים 'בתהליך' חובה לפרט מה בוצע ומה נשאר" }, 400);

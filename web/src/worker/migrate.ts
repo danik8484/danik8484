@@ -54,8 +54,14 @@ async function runMigrations(env: Env): Promise<void> {
     if (applied.has(name)) continue;
     const stmts = splitStatements(sql).map((s) => DB.prepare(s));
     stmts.push(DB.prepare("INSERT INTO _migrations (name) VALUES (?)").bind(name));
-    await DB.batch(stmts);
-    console.log(`applied migration ${name}`);
+    try {
+      await DB.batch(stmts);
+      console.log(`applied migration ${name}`);
+    } catch (e) {
+      // Another isolate may have applied it concurrently: the batch is atomic, so re-check.
+      const again = await DB.prepare("SELECT 1 FROM _migrations WHERE name = ?").bind(name).first();
+      if (!again) throw e;
+    }
   }
 
   // First-admin bootstrap: a one-time login link whose hash was passed at deploy time.

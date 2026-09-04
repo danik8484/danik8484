@@ -221,7 +221,10 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
           {!task.deletedAt && !canChangeStatus && (
             <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">רק {s.nameOf(task.assigneeId)} או המנהל שלו יכולים לעדכן את הסטטוס. אתה יכול לערוך או למחוק את הבקשה.</p>
           )}
-          {!task.deletedAt && canChangeStatus && (
+          {!task.deletedAt && canChangeStatus && task.status === "done" && !canDone && (
+            <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-700">המשימה סומנה כהושלמה על ידי {s.nameOf(task.completedById)}. רק המנהל יכול לפתוח אותה מחדש.</p>
+          )}
+          {!task.deletedAt && canChangeStatus && !(task.status === "done" && !canDone) && (
             <div className="rounded-xl border border-slate-200 p-3">
               <span className="mb-2 block text-sm font-semibold text-ink-700">עדכון סטטוס</span>
               <div className="grid grid-cols-3 gap-1.5" role="radiogroup">

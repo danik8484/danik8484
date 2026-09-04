@@ -76,3 +76,10 @@ export function canMarkDone(viewer: PublicUser, task: Pick<Task, "assigneeId" | 
 export function noteRequiredForInProgress(task: Pick<Task, "recurringId">): boolean {
   return !task.recurringId;
 }
+
+/** Reopening (done → open/in progress) follows the same rule as closing: whoever may close it may reopen it. */
+export function canChangeStatus(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById" | "recurringId" | "status">, to: string, all: PublicUser[]): boolean {
+  if (!canManage(viewer, task.assigneeId, all)) return false;
+  if (to === "done" || task.status === "done") return canMarkDone(viewer, task, all);
+  return true;
+}

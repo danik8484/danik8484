@@ -54,7 +54,12 @@ photoRoutes.post("/tasks/:id/photos", async (c) => {
   if (bytes.byteLength === 0) return c.json({ error: "קובץ ריק" }, 400);
   if (bytes.byteLength > MAX_BYTES) return c.json({ error: "התמונה גדולה מדי (עד 2.5MB)" }, 413);
 
-  const rawName = decodeURIComponent(c.req.header("x-file-name") || "photo.jpg").slice(0, 120);
+  let rawName = "photo.jpg";
+  try {
+    rawName = decodeURIComponent(c.req.header("x-file-name") || "photo.jpg").slice(0, 120) || "photo.jpg";
+  } catch {
+    /* malformed header – keep the default name */
+  }
   const width = int(c.req.header("x-image-width") ?? "");
   const height = int(c.req.header("x-image-height") ?? "");
   const kvKey = `task/${id}/${crypto.randomUUID()}`;

@@ -9,20 +9,22 @@ import { localDate } from "./dates";
 const DEBOUNCE_MS = 3 * 60 * 1000; // wait for a quiet period after the last added task
 const MAX_WAIT_MS = 15 * 60 * 1000; // ...but never hold a digest longer than this
 
-/** Deliver a message to a user: push to their devices, email as a fallback when configured. */
-export async function notifyUser(env: Env, db: Db, userId: number, content: PushContent): Promise<"push" | "email" | "none"> {
+/** Deliver a message to a user: push to their devices, and email as well when email sending is configured. */
+export async function notifyUser(env: Env, db: Db, userId: number, content: PushContent): Promise<"push" | "email" | "both" | "none"> {
   const delivered = await pushToUser(env, db, userId, content);
-  if (delivered > 0) return "push";
+  let emailed = false;
   const user = await db.select().from(users).where(eq(users.id, userId)).get();
   if (user?.email && env.BREVO_API_KEY && env.MAIL_FROM) {
     try {
       await sendPlainEmail(env, user.email, content.title, content.body + (content.url ? `\n\n${content.url}` : ""));
-      return "email";
+      emailed = true;
     } catch (e) {
-      console.error("email fallback failed", e);
+      console.error("email notification failed", e);
     }
   }
-  return "none";
+  if (delivered > 0 && emailed) return "both";
+  if (delivered > 0) return "push";
+  return emailed ? "email" : "none";
 }
 
 /** Remember that `actorId` added a task for `userId`; digests are sent by the cron. */

@@ -10,7 +10,7 @@ import { EmailNotConfigured, sendLoginCode } from "./email";
 const COOKIE = "sid";
 const SESSION_DAYS = 60;
 const CODE_TTL_MS = 10 * 60 * 1000;
-const MAX_CODES_PER_HOUR = 10;
+const MAX_CODES_PER_HOUR = 20;
 const MAX_ATTEMPTS = 5;
 
 export function normalizeEmail(e: unknown): string | null {
