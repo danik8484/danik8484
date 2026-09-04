@@ -10,7 +10,7 @@ import { sendLoginCode } from "./email";
 const COOKIE = "sid";
 const SESSION_DAYS = 60;
 const CODE_TTL_MS = 10 * 60 * 1000;
-const MAX_CODES_PER_HOUR = 5;
+const MAX_CODES_PER_HOUR = 10;
 const MAX_ATTEMPTS = 5;
 
 export function normalizeEmail(e: unknown): string | null {
@@ -107,6 +107,7 @@ export async function createSession(c: Context<AppEnv>, db: Db, userId: number) 
   const now = Date.now();
   const expiresAt = now + SESSION_DAYS * 24 * 60 * 60 * 1000;
   await db.insert(sessions).values({ id, userId, createdAt: now, expiresAt }).run();
+  await db.delete(sessions).where(lt(sessions.expiresAt, now)).run();
   setCookie(c, COOKIE, id, {
     httpOnly: true,
     sameSite: "Lax",

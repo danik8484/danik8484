@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { and, desc, eq, gt, gte, inArray, isNull, lte, or, asc } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, or, asc } from "drizzle-orm";
 import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser } from "../serialize";
-import { isIsoDate, localDate, nowIso, weekdayOf } from "../dates";
+import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
 import { canEditOrDelete, canManage } from "@shared/permissions";
@@ -44,7 +44,15 @@ taskRoutes.get("/board", async (c) => {
   const upcoming = await db
     .select()
     .from(tasks)
-    .where(and(isNull(tasks.deletedAt), inArray(tasks.assigneeId, visible), gt(tasks.dueDate, date), lte(tasks.createdDate, date)))
+    .where(
+      and(
+        isNull(tasks.deletedAt),
+        inArray(tasks.assigneeId, visible),
+        gt(tasks.dueDate, date),
+        lte(tasks.createdDate, date),
+        or(eq(tasks.status, "open"), eq(tasks.status, "in_progress")),
+      ),
+    )
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
     .all();
 
@@ -81,7 +89,7 @@ taskRoutes.post("/", async (c) => {
       .get();
     // Create the first instance now if the start date is today and matches a selected weekday
     if (dueDate <= today && wds.includes(weekdayOf(today))) {
-      await materializeRecurring(db, today);
+      await materializeRecurring(db, today, true);
     }
     return c.json({ ok: true, recurringId: rec.id }, 201);
   }
@@ -252,7 +260,13 @@ logRoutes.get("/", async (c) => {
     .select({ e: taskEvents, title: tasks.title, assigneeId: tasks.assigneeId })
     .from(taskEvents)
     .innerJoin(tasks, eq(tasks.id, taskEvents.taskId))
-    .where(and(inArray(tasks.assigneeId, visible), gte(taskEvents.createdAt, from + "T00:00:00"), lte(taskEvents.createdAt, to + "T23:59:59.999Z")))
+    .where(
+      and(
+        inArray(tasks.assigneeId, visible),
+        gte(taskEvents.createdAt, startOfLocalDay(c.env.TIMEZONE, from)),
+        lt(taskEvents.createdAt, endOfLocalDay(c.env.TIMEZONE, to)),
+      ),
+    )
     .orderBy(desc(taskEvents.id))
     .limit(500)
     .all();

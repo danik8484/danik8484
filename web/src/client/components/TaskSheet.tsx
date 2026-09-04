@@ -113,6 +113,11 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
         </div>
       ) : (
         <div className="space-y-4">
+          {task.status === "done" && task.completedDate && task.completedDate > viewDate && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+              ביום שנבחר המשימה עדיין לא הושלמה. היא הושלמה ב-{fmtDateShort(task.completedDate)}.
+            </div>
+          )}
           {task.deletedAt && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               <b>המשימה נמחקה</b> על ידי {s.nameOf(task.deletedById)} ב-{fmtDateTime(task.deletedAt)}.

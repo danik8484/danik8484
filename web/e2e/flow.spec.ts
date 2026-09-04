@@ -14,6 +14,7 @@ async function login(browser: Browser, email: string): Promise<Page> {
   await page.goto("/");
   await page.getByLabel("כתובת מייל").fill(email);
   await page.getByRole("button", { name: "שלח לי קוד" }).click();
+  await expect(page.getByTestId("dev-code").or(page.locator(".bg-red-50"))).toBeVisible();
   const code = (await page.getByTestId("dev-code").locator("b").textContent())!.trim();
   await page.getByLabel("קוד כניסה").fill(code);
   await page.getByRole("button", { name: "כניסה" }).click();

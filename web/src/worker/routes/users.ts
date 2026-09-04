@@ -88,8 +88,15 @@ userRoutes.patch("/:id", async (c) => {
   }
   patch.role = role;
   patch.managerId = role === "admin" ? null : managerId;
+  const reports = team.filter((u) => u.managerId === id && u.active === 1 && u.id !== id);
+  if (role === "employee" && reports.length > 0) {
+    return c.json({ error: `לא ניתן להפוך לעובד: ${reports.map((u) => u.name).join(", ")} עדיין תחת ניהולו. קודם העבר אותם למנהל אחר.` }, 400);
+  }
   if (body.active !== undefined) {
     if (id === me.id && !body.active) return c.json({ error: "לא ניתן להשבית את עצמך" }, 400);
+    if (!body.active && reports.length > 0) {
+      return c.json({ error: `לא ניתן להשבית: ${reports.map((u) => u.name).join(", ")} עדיין תחת ניהולו. קודם העבר אותם למנהל אחר.` }, 400);
+    }
     patch.active = body.active ? 1 : 0;
   }
   if (body.sortOrder !== undefined) {

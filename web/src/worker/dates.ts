@@ -23,3 +23,37 @@ export function weekdayOf(isoDate: string): number {
 export function nowIso(): string {
   return new Date().toISOString();
 }
+
+/** Offset (minutes east of UTC) of `tz` at a given instant. */
+function tzOffsetMinutes(tz: string, at: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(at);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? "0");
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return Math.round((asUtc - at.getTime()) / 60000);
+}
+
+/** ISO instant (UTC) of local midnight at the start of `isoDate` in `tz`. */
+export function startOfLocalDay(tz: string, isoDate: string): string {
+  const guess = new Date(isoDate + "T00:00:00Z");
+  const offset = tzOffsetMinutes(tz, guess);
+  const adjusted = new Date(guess.getTime() - offset * 60000);
+  // Re-check in case the offset differs across the DST boundary
+  const offset2 = tzOffsetMinutes(tz, adjusted);
+  return new Date(guess.getTime() - offset2 * 60000).toISOString();
+}
+
+/** ISO instant (UTC) of the end of `isoDate` in `tz` (start of the next day). */
+export function endOfLocalDay(tz: string, isoDate: string): string {
+  const next = new Date(isoDate + "T00:00:00Z");
+  next.setUTCDate(next.getUTCDate() + 1);
+  return startOfLocalDay(tz, next.toISOString().slice(0, 10));
+}

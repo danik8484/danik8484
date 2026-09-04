@@ -35,10 +35,18 @@ export default function Board() {
     load();
   }, [load]);
 
+  // Refresh when the tab regains focus and every 60 seconds while visible,
+  // so a manager's board follows the team's updates without reloading.
   useEffect(() => {
-    const onFocus = () => load();
+    const onFocus = () => document.visibilityState === "visible" && load();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const timer = window.setInterval(onFocus, 60_000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.clearInterval(timer);
+    };
   }, [load]);
 
   const setDate = (d: string) => setParams(d === s.today ? {} : { date: d });
@@ -51,14 +59,26 @@ export default function Board() {
     return [...mine, ...visible, ...hidden];
   }, [s]);
 
+  // When looking at a past day, show each task as it was on that day:
+  // a task completed later is still "open" on that day's view.
+  const asOf = useMemo(() => (tasks ?? []).map((t) => (t.status === "done" && t.completedDate && t.completedDate > date ? { ...t, status: "open" as const } : t)), [tasks, date]);
+
   const byUser = useMemo(() => {
     const m = new Map<number, Task[]>();
-    for (const t of tasks ?? []) {
+    for (const t of asOf) {
       if (!m.has(t.assigneeId)) m.set(t.assigneeId, []);
       m.get(t.assigneeId)!.push(t);
     }
     return m;
-  }, [tasks]);
+  }, [asOf]);
+
+  const summary = useMemo(() => {
+    const done = asOf.filter((t) => t.status === "done").length;
+    const inProgress = asOf.filter((t) => t.status === "in_progress").length;
+    const open = asOf.filter((t) => t.status === "open").length;
+    const overdue = asOf.filter((t) => t.status !== "done" && daysBetween(t.dueDate, date) > 0).length;
+    return { done, inProgress, open, overdue, total: asOf.length };
+  }, [asOf, date]);
 
   const isToday = date === s.today;
 
@@ -84,6 +104,25 @@ export default function Board() {
         </button>
       </div>
 
+      {tasks !== null && s.visibleUserIds.length > 1 && summary.total > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl bg-white px-3 py-2 text-xs shadow-sm" data-testid="summary">
+          <span className="font-bold text-ink-800">סיכום היום</span>
+          <span className="text-brand-700">
+            <b>{summary.done}</b> הושלמו
+          </span>
+          <span className="text-amber-800">
+            <b>{summary.inProgress}</b> בתהליך
+          </span>
+          <span className="text-slate-700">
+            <b>{summary.open}</b> פתוחות
+          </span>
+          {summary.overdue > 0 && (
+            <span className="text-red-600">
+              <b>{summary.overdue}</b> נגררות
+            </span>
+          )}
+        </div>
+      )}
       <ErrorText>{error}</ErrorText>
       {tasks === null && !error ? (
         <Spinner />

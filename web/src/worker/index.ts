@@ -10,6 +10,8 @@ import { taskRoutes, logRoutes } from "./routes/tasks";
 import { recurringRoutes } from "./routes/recurring";
 import { userRoutes } from "./routes/users";
 import type { MeResponse } from "@shared/types";
+import type { Env } from "./env";
+import { materializeRecurring } from "./recurring";
 
 const app = new Hono<AppEnv>();
 
@@ -56,4 +58,11 @@ app.route("/api/users", userRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "לא נמצא" }, 404));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /** Nightly: create today's recurring tasks even if nobody opened the app. */
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const db = getDb(env.DB);
+    ctx.waitUntil(materializeRecurring(db, localDate(env.TIMEZONE)));
+  },
+};

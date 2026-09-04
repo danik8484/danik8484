@@ -102,3 +102,8 @@ export type UserRow = typeof users.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type TaskEventRow = typeof taskEvents.$inferSelect;
 export type RecurringRow = typeof recurringTasks.$inferSelect;
+
+export const appMeta = sqliteTable("app_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
