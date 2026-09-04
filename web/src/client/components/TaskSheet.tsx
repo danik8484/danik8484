@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import type { Task, TaskEvent, TaskStatus } from "@shared/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Attachment, Task, TaskEvent, TaskStatus } from "@shared/types";
 import { canEditOrDelete, canMarkDone, noteRequiredForInProgress, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
 import TaskForm from "./TaskForm";
 import { STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime } from "../format";
+import { prepareImage } from "../image";
 
 interface Props {
   taskId: number | null;
@@ -18,6 +19,10 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const s = useSession();
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [photos, setPhotos] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState<Attachment | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<TaskStatus>("open");
   const [note, setNote] = useState("");
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
@@ -30,6 +35,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     const res = await api.task(taskId);
     setTask(res.task);
     setEvents(res.events);
+    setPhotos(res.attachments);
     setStatus(res.task.status);
     setNote(res.task.status === "in_progress" ? res.task.progressNote : "");
   }, [taskId]);
@@ -62,6 +68,37 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function addPhotos(files: FileList | null) {
+    if (!task || !files || files.length === 0) return;
+    setUploading(true);
+    setError("");
+    try {
+      for (const file of Array.from(files).slice(0, 10)) {
+        const img = await prepareImage(file);
+        await api.uploadPhoto(task.id, img.blob, img.name, img.width, img.height);
+      }
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  async function removePhoto(p: Attachment) {
+    if (!confirm("למחוק את התמונה?")) return;
+    try {
+      await api.deletePhoto(p.id);
+      setLightbox(null);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
@@ -229,6 +266,57 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             </div>
           )}
 
+          <div data-testid="photos">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink-700">תמונות{photos.length > 0 && ` (${photos.length})`}</span>
+              {!task.deletedAt && (
+                <>
+                  <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => addPhotos(e.target.files)} data-testid="photo-input" />
+                  <Button variant="secondary" className="px-3 py-1.5" onClick={() => fileInput.current?.click()} disabled={uploading}>
+                    {uploading ? "מעלה..." : "📷 צילום / העלאת תמונה"}
+                  </Button>
+                </>
+              )}
+            </div>
+            {photos.length === 0 ? (
+              <p className="text-xs text-slate-400">אין תמונות עדיין</p>
+            ) : (
+              <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {photos.map((p) => (
+                  <li key={p.id}>
+                    <button type="button" onClick={() => setLightbox(p)} className="block aspect-square w-full overflow-hidden rounded-xl bg-slate-100" aria-label={`תמונה: ${p.fileName}`}>
+                      <img src={`/api/photos/${p.id}`} alt={p.fileName} loading="lazy" className="size-full object-cover" />
+                    </button>
+                    <span className="mt-0.5 block truncate text-[10px] text-slate-500">
+                      {s.nameOf(p.uploadedById)} · {fmtDateTime(p.createdAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {lightbox && (
+            <div className="fixed inset-0 z-[60] flex flex-col bg-black/90" onClick={() => setLightbox(null)} role="dialog" aria-label="תצוגת תמונה">
+              <div className="flex items-center justify-between p-3 text-white" onClick={(e) => e.stopPropagation()}>
+                <span className="truncate text-sm">
+                  {lightbox.fileName} · {s.nameOf(lightbox.uploadedById)} · {fmtDateTime(lightbox.createdAt)}
+                </span>
+                <div className="flex shrink-0 gap-2">
+                  {(lightbox.uploadedById === s.user.id || s.user.role === "admin") && (
+                    <button className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold" onClick={() => removePhoto(lightbox)}>
+                      מחיקה
+                    </button>
+                  )}
+                  <button className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-semibold" onClick={() => setLightbox(null)}>
+                    סגירה
+                  </button>
+                </div>
+              </div>
+              <img src={`/api/photos/${lightbox.id}`} alt={lightbox.fileName} className="min-h-0 flex-1 object-contain p-2" />
+            </div>
+          )}
+
           <div>
             <span className="mb-2 block text-sm font-semibold text-ink-700">היסטוריה</span>
             <ol className="space-y-2 border-s-2 border-slate-200 ps-3">
@@ -271,6 +359,10 @@ export function eventText(ev: TaskEvent): string {
       return "הועברה";
     case "deleted":
       return "נמחקה";
+    case "photo":
+      return "הוסיף תמונה";
+    case "photo_removed":
+      return "מחק תמונה";
     default:
       return ev.type;
   }

@@ -1,6 +1,6 @@
 export type Role = "admin" | "manager" | "employee";
 export type TaskStatus = "open" | "in_progress" | "done";
-export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted";
+export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed";
 
 export interface PublicUser {
   id: number;
@@ -31,6 +31,19 @@ export interface Task {
   deletedAt: string | null;
   deletedById: number | null;
   deleteReason: string | null;
+  photoCount?: number;
+}
+
+export interface Attachment {
+  id: number;
+  taskId: number;
+  uploadedById: number;
+  fileName: string;
+  contentType: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
 }
 
 export interface TaskEvent {
@@ -73,6 +86,7 @@ export interface BoardResponse {
 export interface TaskDetailResponse {
   task: Task;
   events: TaskEvent[];
+  attachments: Attachment[];
 }
 
 export interface LogEntry extends TaskEvent {

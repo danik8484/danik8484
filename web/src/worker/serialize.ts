@@ -1,5 +1,5 @@
-import type { PublicUser, Task, TaskEvent, RecurringTask, TaskStatus, EventType } from "@shared/types";
-import type { UserRow, TaskRow, TaskEventRow, RecurringRow } from "./db/schema";
+import type { PublicUser, Task, TaskEvent, RecurringTask, TaskStatus, EventType, Attachment } from "@shared/types";
+import type { UserRow, TaskRow, TaskEventRow, RecurringRow, AttachmentRow } from "./db/schema";
 
 export function toPublicUser(u: UserRow, includeEmail: boolean): PublicUser {
   return {
@@ -63,5 +63,19 @@ export function toRecurring(r: RecurringRow): RecurringTask {
     startDate: r.startDate,
     active: r.active === 1,
     createdAt: r.createdAt,
+  };
+}
+
+export function toAttachment(a: AttachmentRow): Attachment {
+  return {
+    id: a.id,
+    taskId: a.taskId,
+    uploadedById: a.uploadedById,
+    fileName: a.fileName,
+    contentType: a.contentType,
+    size: a.size,
+    width: a.width,
+    height: a.height,
+    createdAt: a.createdAt,
   };
 }

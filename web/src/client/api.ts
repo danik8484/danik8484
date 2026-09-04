@@ -1,4 +1,4 @@
-import type { BoardResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskStatus } from "@shared/types";
+import type { Attachment, BoardResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskStatus } from "@shared/types";
 
 export class ApiError extends Error {
   status: number;
@@ -35,6 +35,22 @@ export const api = {
     request<{ ok: true; task: Task }>("PATCH", `/api/tasks/${id}`, input),
   setStatus: (id: number, status: TaskStatus, note: string) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/status`, { status, note }),
   deleteTask: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/tasks/${id}`, { reason }),
+  uploadPhoto: async (taskId: number, blob: Blob, name: string, width: number, height: number) => {
+    const res = await fetch(`/api/tasks/${taskId}/photos`, {
+      method: "POST",
+      headers: {
+        "content-type": blob.type || "image/jpeg",
+        "x-file-name": encodeURIComponent(name),
+        ...(width ? { "x-image-width": String(width), "x-image-height": String(height) } : {}),
+      },
+      body: blob,
+      credentials: "same-origin",
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string; attachment?: Attachment };
+    if (!res.ok) throw new ApiError(res.status, data.error || "העלאה נכשלה");
+    return data.attachment as Attachment;
+  },
+  deletePhoto: (id: number) => request<{ ok: true }>("DELETE", `/api/photos/${id}`),
   log: (from: string, to: string) => request<{ from: string; to: string; entries: LogEntry[] }>("GET", `/api/log?from=${from}&to=${to}`),
   recurring: () => request<{ recurring: RecurringTask[] }>("GET", "/api/recurring"),
   updateRecurring: (id: number, input: { title?: string; details?: string; weekdays?: number[]; active?: boolean }) =>

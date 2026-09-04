@@ -117,3 +117,23 @@ export const loginLinks = sqliteTable("login_links", {
   usedAt: integer("used_at"),
   createdAt: integer("created_at").notNull(),
 });
+
+export const taskAttachments = sqliteTable(
+  "task_attachments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    taskId: integer("task_id").notNull(),
+    uploadedById: integer("uploaded_by_id").notNull(),
+    kvKey: text("kv_key").notNull().unique(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    size: integer("size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    deletedAt: text("deleted_at"),
+    deletedById: integer("deleted_by_id"),
+    createdAt: text("created_at").notNull().default(nowIso),
+  },
+  (t) => [index("task_attachments_task_idx").on(t.taskId)],
+);
+export type AttachmentRow = typeof taskAttachments.$inferSelect;

@@ -22,6 +22,8 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Photos attached to tasks (auto-provisioned on deploy like the database)
+  "kv_namespaces": [{ "binding": "FILES" }],
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "vars": {
     "APP_ENV": "production",

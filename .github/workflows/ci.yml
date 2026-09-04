@@ -24,9 +24,9 @@ jobs:
       - run: npm run build
 
   deploy:
-    # Deploys to Cloudflare when pushing to main, if the CLOUDFLARE_API_TOKEN secret is set.
+    # Deploys to Cloudflare when pushing to main or the working branch, if the CLOUDFLARE_API_TOKEN secret is set.
     needs: check
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/hi-l4avs8') && github.event_name == 'push'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,12 +42,7 @@ jobs:
       - name: Check for deploy token
         id: token
         run: echo "present=${{ secrets.CLOUDFLARE_API_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
-      - name: Apply database migrations
-        if: steps.token.outputs.present == 'true'
-        run: npm run db:migrate:remote
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      - name: Deploy
+      - name: Deploy (schema is applied by the Worker on first request)
         if: steps.token.outputs.present == 'true'
         run: npm run deploy
         env:

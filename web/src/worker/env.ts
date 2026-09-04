@@ -1,5 +1,6 @@
 export interface Env {
   DB: D1Database;
+  FILES: KVNamespace;
   ASSETS: Fetcher;
   APP_ENV: "development" | "production";
   APP_NAME: string;

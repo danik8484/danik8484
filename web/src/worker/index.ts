@@ -9,6 +9,7 @@ import { authRoutes } from "./routes/auth";
 import { taskRoutes, logRoutes } from "./routes/tasks";
 import { recurringRoutes } from "./routes/recurring";
 import { userRoutes } from "./routes/users";
+import { photoRoutes } from "./routes/photos";
 import type { MeResponse } from "@shared/types";
 import type { Env } from "./env";
 import { materializeRecurring } from "./recurring";
@@ -57,6 +58,7 @@ app.route("/api/tasks", taskRoutes);
 app.route("/api/log", logRoutes);
 app.route("/api/recurring", recurringRoutes);
 app.route("/api/users", userRoutes);
+app.route("/api", photoRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "לא נמצא" }, 404));
 

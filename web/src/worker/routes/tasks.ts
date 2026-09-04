@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, asc } from "drizzle-orm";
 import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
-import { toTask, toEvent, toPublicUser } from "../serialize";
+import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
+import { listAttachments, photoCounts } from "./photos";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
@@ -62,7 +63,9 @@ taskRoutes.get("/board", async (c) => {
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
     .all();
 
-  return c.json({ date, tasks: rows.map(toTask), upcoming: upcoming.map(toTask), sent: sent.map(toTask) });
+  const counts = await photoCounts(db, [...rows, ...upcoming, ...sent].map((t) => t.id));
+  const withCount = (t: typeof rows[number]) => ({ ...toTask(t), photoCount: counts.get(t.id) ?? 0 });
+  return c.json({ date, tasks: rows.map(withCount), upcoming: upcoming.map(withCount), sent: sent.map(withCount) });
 });
 
 taskRoutes.post("/", async (c) => {
@@ -118,7 +121,8 @@ taskRoutes.get("/:id", async (c) => {
   if (!row) return c.json({ error: "לא נמצא" }, 404);
   if (!canOpenTask(toPublicUser(me, false), row, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
   const events = await db.select().from(taskEvents).where(eq(taskEvents.taskId, id)).orderBy(asc(taskEvents.id)).all();
-  return c.json({ task: toTask(row), events: events.map(toEvent) });
+  const attachments = await listAttachments(db, id);
+  return c.json({ task: toTask(row), events: events.map(toEvent), attachments: attachments.map(toAttachment) });
 });
 
 taskRoutes.post("/:id/status", async (c) => {

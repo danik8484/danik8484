@@ -13,6 +13,8 @@ const TYPE_STYLE: Record<string, string> = {
   edited: "bg-sky-100 text-sky-800",
   reassigned: "bg-sky-100 text-sky-800",
   deleted: "bg-red-100 text-red-700",
+  photo: "bg-slate-100 text-slate-700",
+  photo_removed: "bg-slate-100 text-slate-700",
 };
 
 export default function Log() {
