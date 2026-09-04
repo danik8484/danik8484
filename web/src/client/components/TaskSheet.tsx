@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Task, TaskEvent, TaskStatus } from "@shared/types";
-import { canEditOrDelete } from "@shared/permissions";
+import { canEditOrDelete, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, Spinner, StatusBadge, inputCls } from "./ui";
@@ -43,6 +43,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   }, [load]);
 
   const editable = task ? canEditOrDelete(s.user, task, s.users) : false;
+  const canChangeStatus = task ? s.canSee(task.assigneeId) : false;
+  const tier = task ? taskTier(task, s.users) : 1;
   const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") : false;
 
   async function saveStatus() {
@@ -129,6 +131,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={task.status} />
               {task.recurringId && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">משימה קבועה</span>}
+              {tier === 0 && task.createdById !== task.assigneeId && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-xs font-semibold text-white">מההנהלה</span>}
+              {tier === 2 && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">בקשה מעמית</span>}
               {task.status !== "done" && daysBetween(task.dueDate, viewDate) > 0 && (
                 <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">נגררת {daysBetween(task.dueDate, viewDate)} ימים</span>
               )}
@@ -161,7 +165,10 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             )}
           </div>
 
-          {!task.deletedAt && (
+          {!task.deletedAt && !canChangeStatus && (
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">רק {s.nameOf(task.assigneeId)} או המנהל שלו יכולים לעדכן את הסטטוס. אתה יכול לערוך או למחוק את הבקשה.</p>
+          )}
+          {!task.deletedAt && canChangeStatus && (
             <div className="rounded-xl border border-slate-200 p-3">
               <span className="mb-2 block text-sm font-semibold text-ink-700">עדכון סטטוס</span>
               <div className="grid grid-cols-3 gap-1.5" role="radiogroup">

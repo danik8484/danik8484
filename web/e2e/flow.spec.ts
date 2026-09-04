@@ -93,11 +93,13 @@ test.describe.serial("daily schedule flow", () => {
     // Ron cannot delete Dani's task (not creator, not admin)
     await expect(page.getByRole("dialog").getByRole("button", { name: "מחיקה" })).toHaveCount(0);
     await page.getByRole("button", { name: "סגירה" }).click();
-    await expect(page.getByTestId("card-3").getByText("חזרתי ל-3 לידים, נשארו 2")).toBeVisible();
+    await expect(page.getByTestId("card-3").getByText("חזרתי ל-3 לידים, נשארו 2").first()).toBeVisible();
 
-    // API: Ron may not add a task for Uri Haskel (not his report)
+    // API: Ron may send a one-off request to Uri Haskel, but not a recurring task (not his report)
     await apiLogin(request, EMAILS.ron);
-    const forbidden = await request.post("/api/tasks", { data: { title: "x", assigneeId: 5, dueDate: "2030-01-01" } });
+    const allowed = await request.post("/api/tasks", { data: { title: "בקשה מרון", assigneeId: 5, dueDate: "2030-01-01" } });
+    expect(allowed.status()).toBe(201);
+    const forbidden = await request.post("/api/tasks", { data: { title: "x", assigneeId: 5, dueDate: "2030-01-01", weekdays: [0, 1] } });
     expect(forbidden.status()).toBe(403);
     const forbiddenRead = await request.get("/api/tasks/board");
     const board = await forbiddenRead.json();
@@ -114,7 +116,10 @@ test.describe.serial("daily schedule flow", () => {
     await expect(page.getByRole("link", { name: "יומן פעילות" })).toHaveCount(0);
 
     await page.getByRole("button", { name: "הוספת משימה", exact: true }).click();
-    await expect(page.getByLabel("עובד").locator("option")).toHaveCount(1);
+    // Only himself as a managed assignee; everyone else is offered under "request from another teammate"
+    await expect(page.getByLabel("עובד").locator("option")).toHaveCount(5);
+    await expect(page.getByLabel("עובד").locator("optgroup option")).toHaveCount(4);
+    await expect(page.getByLabel("עובד")).toHaveValue("3");
     await page.getByLabel("משימה", { exact: true }).fill(T.uriSSelf);
     await page.getByRole("button", { name: "הוספה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.uriSSelf)).toBeVisible();

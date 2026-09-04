@@ -16,7 +16,9 @@ interface Props {
 
 export default function TaskForm({ defaultAssigneeId, defaultDate, existing, forceRecurring = false, onSaved, onCancel }: Props) {
   const s = useSession();
-  const assignees = s.users.filter((u) => u.active && s.canSee(u.id));
+  const allActive = s.users.filter((u) => u.active);
+  const managed = allActive.filter((u) => s.canSee(u.id));
+  const others = allActive.filter((u) => !s.canSee(u.id));
   const [title, setTitle] = useState(existing?.title ?? "");
   const [details, setDetails] = useState(existing?.details ?? "");
   const [assigneeId, setAssigneeId] = useState(existing?.assigneeId ?? defaultAssigneeId);
@@ -60,11 +62,20 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
       <div className="grid grid-cols-2 gap-3">
         <Field label="עובד">
           <select className={inputCls} value={assigneeId} onChange={(e) => setAssigneeId(Number(e.target.value))}>
-            {assignees.map((u) => (
+            {managed.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.id === s.user.id ? `${u.name} (אני)` : u.name}
               </option>
             ))}
+            {others.length > 0 && !recurring && (
+              <optgroup label="בקשה לעובד אחר">
+                {others.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </Field>
         <Field label={recurring ? "החל מתאריך" : "תאריך יעד"}>
@@ -72,12 +83,24 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
         </Field>
       </div>
 
+      {!s.canSee(assigneeId) && (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          המשימה תופיע אצל {s.nameOf(assigneeId)} כבקשה ממך. תוכל לעקוב אחרי הסטטוס שלה ב"משימות ששלחתי לאחרים", בלי לראות את שאר הלו"ז.
+        </p>
+      )}
       {!existing && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <label className="flex items-center gap-2 text-sm font-semibold text-ink-700">
-            <input type="checkbox" className="size-4 accent-brand-600" checked={recurring} disabled={forceRecurring} onChange={(e) => setRecurring(e.target.checked)} />
+            <input
+              type="checkbox"
+              className="size-4 accent-brand-600"
+              checked={recurring}
+              disabled={forceRecurring || !s.canSee(assigneeId)}
+              onChange={(e) => setRecurring(e.target.checked)}
+            />
             משימה קבועה (חוזרת כל שבוע)
           </label>
+          {!s.canSee(assigneeId) && <p className="mt-1 text-xs text-slate-500">משימה קבועה אפשר להגדיר רק לעצמך או לעובדים שאתה מנהל.</p>}
           {recurring && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {WEEKDAYS_SHORT.map((label, d) => (

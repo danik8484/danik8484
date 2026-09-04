@@ -66,6 +66,8 @@ export interface MeResponse {
 export interface BoardResponse {
   date: string;
   tasks: Task[]; // only tasks of visible users
+  upcoming: Task[]; // future tasks of visible users
+  sent: Task[]; // tasks I created for teammates whose schedule I cannot see
 }
 
 export interface TaskDetailResponse {

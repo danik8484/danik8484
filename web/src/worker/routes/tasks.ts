@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, or, asc } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, asc } from "drizzle-orm";
 import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser } from "../serialize";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
-import { canEditOrDelete, canManage } from "@shared/permissions";
+import { canAssignTask, canEditOrDelete, canManage, canOpenTask } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import type { BoardResponse, TaskStatus } from "@shared/types";
 
@@ -24,7 +24,13 @@ taskRoutes.get("/board", async (c) => {
   await materializeRecurring(db, today);
 
   const visible = visibleIdsFor(me, team);
-  if (visible.length === 0) return c.json<BoardResponse & { upcoming: [] }>({ date, tasks: [], upcoming: [] });
+  const sent = await db
+    .select()
+    .from(tasks)
+    .where(and(isNull(tasks.deletedAt), eq(tasks.createdById, me.id), notInArray(tasks.assigneeId, visible.length ? visible : [-1]), or(eq(tasks.status, "open"), eq(tasks.status, "in_progress"), gte(tasks.completedDate, date))))
+    .orderBy(asc(tasks.dueDate), asc(tasks.id))
+    .all();
+  if (visible.length === 0) return c.json<BoardResponse & { upcoming: [] }>({ date, tasks: [], upcoming: [], sent: sent.map(toTask) });
 
   const rows = await db
     .select()
@@ -56,13 +62,12 @@ taskRoutes.get("/board", async (c) => {
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
     .all();
 
-  return c.json({ date, tasks: rows.map(toTask), upcoming: upcoming.map(toTask) });
+  return c.json({ date, tasks: rows.map(toTask), upcoming: upcoming.map(toTask), sent: sent.map(toTask) });
 });
 
 taskRoutes.post("/", async (c) => {
   const db = c.get("db");
   const me = c.get("user");
-  const team = c.get("team");
   const body = await readJson(c.req.raw);
   const title = str(body.title, 200);
   const details = str(body.details, 3000, { required: false });
@@ -74,9 +79,10 @@ taskRoutes.post("/", async (c) => {
   if (assigneeId === null) return c.json({ error: "חובה לבחור עובד" }, 400);
   if (!isIsoDate(dueDate)) return c.json({ error: "תאריך לא תקין" }, 400);
   if (wds === null) return c.json({ error: "ימים לא תקינים" }, 400);
-  const assignee = team.find((u) => u.id === assigneeId && u.active === 1);
-  if (!assignee || !canManage(toPublicUser(me, false), assigneeId, c.get("teamPublic"))) {
-    return c.json({ error: "אין הרשאה להוסיף משימה לעובד זה" }, 403);
+  const teamPublic = c.get("teamPublic");
+  if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "עובד לא תקין" }, 400);
+  if (wds.length > 0 && !canManage(toPublicUser(me, false), assigneeId, teamPublic)) {
+    return c.json({ error: "משימה קבועה אפשר להגדיר רק לעצמך או לעובדים שאתה מנהל" }, 403);
   }
 
   const today = localDate(c.env.TIMEZONE);
@@ -110,7 +116,7 @@ taskRoutes.get("/:id", async (c) => {
   if (id === null) return c.json({ error: "לא נמצא" }, 404);
   const row = await db.select().from(tasks).where(eq(tasks.id, id)).get();
   if (!row) return c.json({ error: "לא נמצא" }, 404);
-  if (!canManage(toPublicUser(me, false), row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  if (!canOpenTask(toPublicUser(me, false), row, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
   const events = await db.select().from(taskEvents).where(eq(taskEvents.taskId, id)).orderBy(asc(taskEvents.id)).all();
   return c.json({ task: toTask(row), events: events.map(toEvent) });
 });
@@ -173,7 +179,6 @@ taskRoutes.patch("/:id", async (c) => {
   const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
   if (!row) return c.json({ error: "לא נמצא" }, 404);
   const mePublic = toPublicUser(me, false);
-  if (!canManage(mePublic, row.assigneeId, teamPublic)) return c.json({ error: "אין הרשאה" }, 403);
   if (!canEditOrDelete(mePublic, row, teamPublic)) return c.json({ error: "רק מי שהוסיף את המשימה (או המנהל) יכול לערוך אותה" }, 403);
 
   const patch: Partial<typeof tasks.$inferInsert> = { updatedAt: nowIso() };
@@ -206,7 +211,7 @@ taskRoutes.patch("/:id", async (c) => {
     const assigneeId = int(body.assigneeId);
     const target = c.get("team").find((u) => u.id === assigneeId && u.active === 1);
     if (assigneeId === null || !target) return c.json({ error: "עובד לא תקין" }, 400);
-    if (!canManage(mePublic, assigneeId, teamPublic)) return c.json({ error: "אין הרשאה להעביר משימה לעובד זה" }, 403);
+    if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "עובד לא תקין" }, 400);
     if (assigneeId !== row.assigneeId) {
       patch.assigneeId = assigneeId;
       reassignedTo = assigneeId;
@@ -239,7 +244,6 @@ taskRoutes.delete("/:id", async (c) => {
   const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
   if (!row) return c.json({ error: "לא נמצא" }, 404);
   const mePublic = toPublicUser(me, false);
-  if (!canManage(mePublic, row.assigneeId, teamPublic)) return c.json({ error: "אין הרשאה" }, 403);
   if (!canEditOrDelete(mePublic, row, teamPublic)) return c.json({ error: "רק מי שהוסיף את המשימה (או המנהל) יכול למחוק אותה" }, 403);
   const now = nowIso();
   await db.update(tasks).set({ deletedAt: now, deletedById: me.id, deleteReason: reason, updatedAt: now }).where(eq(tasks.id, id)).run();

@@ -31,3 +31,28 @@ export function canEditOrDelete(viewer: PublicUser, task: Pick<Task, "assigneeId
 export function canSeeActivityLog(viewer: PublicUser): boolean {
   return viewer.role === "admin" || viewer.role === "manager";
 }
+
+/** Anyone may add a one-off task to any active teammate, even without seeing their schedule. */
+export function canAssignTask(targetId: number, all: PublicUser[]): boolean {
+  const t = all.find((u) => u.id === targetId);
+  return !!t && t.active;
+}
+
+/**
+ * Where a task sits inside the assignee's card:
+ * 0 = from management (admin or the assignee's direct manager) – top
+ * 1 = the assignee's own task – middle
+ * 2 = a request from another teammate – separate section at the bottom
+ */
+export function taskTier(task: Pick<Task, "assigneeId" | "createdById">, all: PublicUser[]): 0 | 1 | 2 {
+  if (task.createdById === task.assigneeId) return 1;
+  const creator = all.find((u) => u.id === task.createdById);
+  const assignee = all.find((u) => u.id === task.assigneeId);
+  if (creator?.role === "admin" || (assignee && assignee.managerId === task.createdById)) return 0;
+  return 2;
+}
+
+/** The creator may always open a task they created, even for a teammate whose schedule is hidden. */
+export function canOpenTask(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById">, all: PublicUser[]): boolean {
+  return canView(viewer, task.assigneeId, all) || task.createdById === viewer.id;
+}

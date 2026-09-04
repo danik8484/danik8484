@@ -7,6 +7,7 @@ import { Button, ErrorText, Modal, Spinner, StatusIcon } from "../components/ui"
 import TaskForm from "../components/TaskForm";
 import TaskSheet from "../components/TaskSheet";
 import { ROLE_LABEL, addDays, daysBetween, fmtDateLong, fmtDateShort, isoValid } from "../format";
+import { taskTier } from "@shared/permissions";
 
 export default function Board() {
   const s = useSession();
@@ -14,6 +15,7 @@ export default function Board() {
   const date = isoValid(params.get("date")) ? (params.get("date") as string) : s.today;
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [upcoming, setUpcoming] = useState<Task[]>([]);
+  const [sent, setSent] = useState<Task[]>([]);
   const [error, setError] = useState("");
   const [addFor, setAddFor] = useState<number | null>(null);
   const [openTask, setOpenTask] = useState<number | null>(null);
@@ -24,6 +26,7 @@ export default function Board() {
       const res = await api.board(date);
       setTasks(res.tasks);
       setUpcoming(res.upcoming);
+      setSent(res.sent);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -142,6 +145,29 @@ export default function Board() {
         </div>
       )}
 
+      {sent.length > 0 && (
+        <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm" data-testid="sent">
+          <h2 className="text-sm font-bold text-ink-800">משימות ששלחתי לאחרים ({sent.length})</h2>
+          <p className="mb-1 text-xs text-slate-500">בקשות שהוספת לעובדים שהלו"ז שלהם לא חשוף לך. רואים רק את הסטטוס של הבקשה עצמה.</p>
+          <ul className="divide-y divide-slate-100">
+            {sent.map((t) => (
+              <li key={t.id}>
+                <button onClick={() => setOpenTask(t.id)} className="flex w-full items-center gap-3 py-2 text-start" data-testid={`task-${t.id}`}>
+                  <StatusIcon status={t.status} />
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-sm font-semibold ${t.status === "done" ? "text-slate-400 line-through" : "text-ink-900"}`}>{t.title}</span>
+                    <span className="block text-xs text-slate-500">
+                      ל{s.nameOf(t.assigneeId)} · {fmtDateShort(t.dueDate)}
+                      {t.status === "in_progress" && t.progressNote && <span className="text-amber-800"> · {t.progressNote}</span>}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {upcoming.length > 0 && (
         <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm">
           <button className="flex w-full items-center justify-between text-sm font-bold text-ink-800" onClick={() => setShowUpcoming((v) => !v)}>
@@ -216,6 +242,11 @@ function UserCard({
   const inProgress = tasks.filter((t) => t.status === "in_progress");
   const done = tasks.filter((t) => t.status === "done");
   const active = [...inProgress, ...open];
+  // Order inside the card: management first, own tasks, then requests from teammates in a separate section.
+  const fromManagement = active.filter((t) => taskTier(t, s.users) === 0);
+  const own = active.filter((t) => taskTier(t, s.users) === 1);
+  const fromPeers = active.filter((t) => taskTier(t, s.users) === 2);
+  const showHeaders = [fromManagement, own, fromPeers].filter((g) => g.length > 0).length > 1;
 
   return (
     <section className={`rounded-2xl bg-white shadow-sm ${isMe ? "ring-2 ring-brand-500" : ""}`} data-testid={`card-${user.id}`} aria-label={user.name}>
@@ -249,7 +280,7 @@ function UserCard({
         )}
       </header>
 
-      {!visible ? (
+      {!visible && (
         <div className="relative px-3 py-3">
           <ul className="blurred space-y-2" aria-hidden="true">
             {[80, 60, 70].map((w, i) => (
@@ -261,14 +292,48 @@ function UserCard({
           </ul>
           <p className="absolute inset-0 grid place-items-center text-xs font-semibold text-slate-500">הלו"ז של {user.name} אינו חשוף לך</p>
         </div>
-      ) : (
+      )}
+      {!visible && (
+        <div className="px-2 pb-1">
+          <Button variant="ghost" className="w-full text-brand-700" onClick={onAdd}>
+            + בקשת משימה מ{user.name}
+          </Button>
+        </div>
+      )}
+      {visible && (
         <div className="px-1 py-1">
           {tasks.length === 0 && <p className="px-3 py-4 text-center text-sm text-slate-400">אין משימות ליום זה</p>}
-          <ul>
-            {active.map((t) => (
-              <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
-            ))}
-          </ul>
+          {fromManagement.length > 0 && (
+            <>
+              {showHeaders && <GroupHeader>מההנהלה</GroupHeader>}
+              <ul data-testid={`group-management-${user.id}`}>
+                {fromManagement.map((t) => (
+                  <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
+                ))}
+              </ul>
+            </>
+          )}
+          {own.length > 0 && (
+            <>
+              {showHeaders && <GroupHeader>{isMe ? "שלי" : `של ${user.name}`}</GroupHeader>}
+              <ul data-testid={`group-own-${user.id}`}>
+                {own.map((t) => (
+                  <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
+                ))}
+              </ul>
+            </>
+          )}
+          {fromPeers.length > 0 && (
+            <>
+              <div className="mx-3 mt-1 border-t border-dashed border-violet-200" />
+              <GroupHeader className="text-violet-700">בקשות מעובדים אחרים</GroupHeader>
+              <ul data-testid={`group-peers-${user.id}`}>
+                {fromPeers.map((t) => (
+                  <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
+                ))}
+              </ul>
+            </>
+          )}
           {done.length > 0 && (
             <>
               {active.length > 0 && <div className="mx-3 my-1 border-t border-dashed border-slate-200" />}
@@ -288,6 +353,10 @@ function UserCard({
       )}
     </section>
   );
+}
+
+function GroupHeader({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <div className={`px-3 pb-0.5 pt-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 ${className}`}>{children}</div>;
 }
 
 function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onOpen: (id: number) => void }) {

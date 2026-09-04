@@ -25,7 +25,7 @@ export const api = {
   verifyCode: (email: string, code: string) => request<{ ok: true }>("POST", "/api/auth/verify", { email, code }),
   logout: () => request<{ ok: true }>("POST", "/api/auth/logout"),
   me: () => request<MeResponse>("GET", "/api/me"),
-  board: (date: string) => request<BoardResponse & { upcoming: Task[] }>("GET", `/api/tasks/board?date=${date}`),
+  board: (date: string) => request<BoardResponse>("GET", `/api/tasks/board?date=${date}`),
   task: (id: number) => request<TaskDetailResponse>("GET", `/api/tasks/${id}`),
   createTask: (input: { title: string; details: string; assigneeId: number; dueDate: string; weekdays?: number[] }) =>
     request<{ ok: true; task?: Task; recurringId?: number }>("POST", "/api/tasks", input),
