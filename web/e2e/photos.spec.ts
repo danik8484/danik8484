@@ -1,5 +1,13 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
+const NAME: Record<string, string> = {
+  "dani@example.com": "דני שקנבסקי",
+  "ron@example.com": "רון וליצ'קו",
+  "uri.s@example.com": "אורי שפירא",
+  "dani.k@example.com": "דני קגנוביץ",
+  "uri.h@example.com": "אורי חסקל",
+};
+
 async function apiLogin(request: APIRequestContext, email: string) {
   const r = await request.post("/api/auth/request-code", { data: { email } });
   const { devCode } = await r.json();
@@ -31,11 +39,11 @@ test("photos can be attached to a task, viewed by permitted users, and removed",
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto("/");
-  await page.getByLabel("כתובת מייל").fill("dani@example.com");
-  await page.getByRole("button", { name: "שלח לי קוד" }).click();
+  await page.getByTestId("team-picker").getByRole("button", { name: NAME["dani@example.com"], exact: true }).click();
+  await page.getByRole("button", { name: "שלח לי קוד לוואטסאפ" }).click();
   await expect(page.getByTestId("dev-code")).toBeVisible();
   const code = (await page.getByTestId("dev-code").locator("b").textContent())!.trim();
-  await page.getByLabel("קוד כניסה").fill(code);
+  await page.getByLabel("קוד אימות").fill(code);
   await page.getByRole("button", { name: "כניסה" }).click();
   await expect(page.getByTestId("card-1")).toBeVisible();
   await page.getByText("משימות עתידיות").click();

@@ -1,14 +1,22 @@
 import { test, expect, type Browser, type Page, type APIRequestContext } from "@playwright/test";
 
+const NAME: Record<string, string> = {
+  "dani@example.com": "דני שקנבסקי",
+  "ron@example.com": "רון וליצ'קו",
+  "uri.s@example.com": "אורי שפירא",
+  "dani.k@example.com": "דני קגנוביץ",
+  "uri.h@example.com": "אורי חסקל",
+};
+
 async function login(browser: Browser, email: string): Promise<Page> {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto("/");
-  await page.getByLabel("כתובת מייל").fill(email);
-  await page.getByRole("button", { name: "שלח לי קוד" }).click();
+  await page.getByTestId("team-picker").getByRole("button", { name: NAME[email], exact: true }).click();
+  await page.getByRole("button", { name: "שלח לי קוד לוואטסאפ" }).click();
   await expect(page.getByTestId("dev-code").or(page.locator(".bg-red-50"))).toBeVisible();
   const code = (await page.getByTestId("dev-code").locator("b").textContent())!.trim();
-  await page.getByLabel("קוד כניסה").fill(code);
+  await page.getByLabel("קוד אימות").fill(code);
   await page.getByRole("button", { name: "כניסה" }).click();
   await expect(page.getByTestId("card-1")).toBeVisible();
   return page;

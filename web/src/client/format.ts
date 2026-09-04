@@ -1,10 +1,22 @@
-import type { TaskStatus, Role } from "@shared/types";
+import type { TaskStatus, Role, TaskPriority } from "@shared/types";
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   open: "פתוח",
   in_progress: "בתהליך",
   done: "הושלם",
 };
+
+export const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  urgent: "🚨 דחוף",
+  high: "⬆️ עדיפות גבוהה",
+  normal: "רגיל",
+};
+export const PRIORITY_HINT: Record<TaskPriority, string> = {
+  urgent: "לסיים כמה שיותר מהר. תמיד בראש הרשימה, מודגש עם סירנה.",
+  high: "לפני המשימות הרגילות, מודגש.",
+  normal: "לפי הסדר הרגיל.",
+};
+export const PRIORITY_ORDER: Record<TaskPriority, number> = { urgent: 0, high: 1, normal: 2 };
 
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "מנהל ראשי",
@@ -84,4 +96,14 @@ export function shortName(userId: number, all: { id: number; name: string }[]): 
   const [first, ...rest] = u.name.trim().split(/\s+/);
   const clash = all.some((x) => x.id !== userId && x.name.trim().split(/\s+/)[0] === first);
   return clash && rest.length > 0 ? `${first} ${rest[0][0]}.` : first;
+}
+
+/** Local datetime-local input value (YYYY-MM-DDTHH:MM) from an ISO instant, and back. */
+export function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+export function fromLocalInput(v: string): string {
+  return new Date(v).toISOString();
 }

@@ -1,5 +1,13 @@
 import { test, expect, type Browser, type Page, type APIRequestContext } from "@playwright/test";
 
+const NAME: Record<string, string> = {
+  "dani@example.com": "דני שקנבסקי",
+  "ron@example.com": "רון וליצ'קו",
+  "uri.s@example.com": "אורי שפירא",
+  "dani.k@example.com": "דני קגנוביץ",
+  "uri.h@example.com": "אורי חסקל",
+};
+
 const EMAILS = {
   dani: "dani@example.com",
   ron: "ron@example.com",
@@ -12,11 +20,11 @@ async function login(browser: Browser, email: string): Promise<Page> {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto("/");
-  await page.getByLabel("כתובת מייל").fill(email);
-  await page.getByRole("button", { name: "שלח לי קוד" }).click();
+  await page.getByTestId("team-picker").getByRole("button", { name: NAME[email], exact: true }).click();
+  await page.getByRole("button", { name: "שלח לי קוד לוואטסאפ" }).click();
   await expect(page.getByTestId("dev-code").or(page.locator(".bg-red-50"))).toBeVisible();
   const code = (await page.getByTestId("dev-code").locator("b").textContent())!.trim();
-  await page.getByLabel("קוד כניסה").fill(code);
+  await page.getByLabel("קוד אימות").fill(code);
   await page.getByRole("button", { name: "כניסה" }).click();
   await expect(page.getByRole("heading", { name: "לו\"ז יומי" }).or(page.getByText("לו\"ז יומי").first())).toBeVisible();
   await expect(page.getByTestId("card-1")).toBeVisible();
@@ -49,7 +57,7 @@ test.describe.serial("daily schedule flow", () => {
     // Task for Uri Shapira
     await page.getByTestId("card-3").getByRole("button", { name: /הוספת משימה/ }).click();
     await page.getByLabel("משימה", { exact: true }).fill(T.daniForUriS);
-    await page.getByLabel("פירוט").fill("לחזור לכל הלידים מאתמול");
+    await page.getByLabel("פירוט", { exact: true }).fill("לחזור לכל הלידים מאתמול");
     await expect(page.getByLabel("איש צוות")).toHaveValue("3");
     await page.getByRole("button", { name: "הוספה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.daniForUriS)).toBeVisible();

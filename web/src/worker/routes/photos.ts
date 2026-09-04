@@ -7,6 +7,7 @@ import { toAttachment, toPublicUser } from "../serialize";
 import { canOpenTask } from "@shared/permissions";
 import { chunk, int } from "../validate";
 import { nowIso } from "../dates";
+import { adminFeedFor } from "../notify";
 
 const MAX_BYTES = 2_500_000; // images are resized on the phone before upload; this is a hard cap
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -73,6 +74,7 @@ photoRoutes.post("/tasks/:id/photos", async (c) => {
     .get();
   await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "photo", note: rawName }).run();
   await db.update(tasks).set({ updatedAt: nowIso() }).where(eq(tasks.id, id)).run();
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "photo", { extra: rawName }));
   return c.json({ ok: true, attachment: toAttachment(row) }, 201);
 });
 
@@ -125,5 +127,6 @@ photoRoutes.delete("/photos/:id", async (c) => {
   await c.env.FILES.delete(row.kvKey);
   if (row.thumbKey) await c.env.FILES.delete(row.thumbKey);
   await db.insert(taskEvents).values({ taskId: row.taskId, actorId: me.id, type: "photo_removed", note: row.fileName }).run();
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, row.taskId, me, "photo_removed", { extra: row.fileName }));
   return c.json({ ok: true });
 });

@@ -5,7 +5,7 @@ import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
 import TaskForm from "./TaskForm";
-import { STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime } from "../format";
+import { PRIORITY_LABEL, STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime, fromLocalInput, toLocalInput } from "../format";
 import { makeThumb, prepareImage } from "../image";
 
 interface Props {
@@ -29,6 +29,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const [dealsOpen, setDealsOpen] = useState(false);
   const [calls, setCalls] = useState<string>("");
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [reminderValue, setReminderValue] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +53,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setMode("view");
     setError("");
     setReason("");
+    setReminderOpen(false);
     load().catch((e) => setError((e as Error).message));
   }, [load]);
 
@@ -109,6 +112,22 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
       onChanged();
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  async function saveReminder(value: string | null) {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.setReminder(task.id, value ? fromLocalInput(value) : null);
+      await load();
+      setReminderOpen(false);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -179,6 +198,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={task.status} />
+              {task.priority === "urgent" && <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">{PRIORITY_LABEL.urgent}</span>}
+              {task.priority === "high" && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">{PRIORITY_LABEL.high}</span>}
               {task.recurringId && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">משימה קבועה</span>}
               {tier === 0 && task.createdById !== task.assigneeId && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-xs font-semibold text-white">מההנהלה</span>}
               {tier === 2 && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">בקשה מעמית</span>}
@@ -187,7 +208,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                 <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">נגררת {daysBetween(task.dueDate, viewDate)} ימים</span>
               )}
             </div>
-            <h3 className="mt-2 text-xl font-bold text-ink-900">
+            <h3 className={`mt-2 text-xl text-ink-900 ${task.priority === "normal" ? "font-bold" : "font-black"}`}>
               {task.title}
               {task.createdById !== task.assigneeId && (
                 <>
@@ -364,6 +385,50 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             </div>
           )}
 
+          {!task.deletedAt && task.status !== "done" && canChangeStatus && (
+            <div className="rounded-xl border border-slate-200 p-3" data-testid="reminder">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-ink-700">
+                  ⏰ תזכורת
+                  {task.reminderAt && <span className="ms-2 text-xs font-normal text-slate-600">ל-{fmtDateTime(task.reminderAt)}, ואז כל חצי שעה עד שמסמנים הושלם</span>}
+                </span>
+                {!reminderOpen && (
+                  <div className="flex gap-1">
+                    {task.reminderAt && (
+                      <Button variant="ghost" className="px-2 py-1.5 text-red-700" onClick={() => saveReminder(null)} disabled={busy}>
+                        ביטול
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      className="px-3 py-1.5"
+                      onClick={() => {
+                        setReminderValue(task.reminderAt ? toLocalInput(task.reminderAt) : toLocalInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()));
+                        setReminderOpen(true);
+                      }}
+                    >
+                      {task.reminderAt ? "שינוי" : "הוספת תזכורת"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {reminderOpen && (
+                <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <label className="block flex-1">
+                    <span className="mb-1 block text-xs font-semibold text-slate-600">מתי לעשות / מתי להמשיך</span>
+                    <input type="datetime-local" className={inputCls} value={reminderValue} onChange={(e) => setReminderValue(e.target.value)} data-testid="reminder-input" />
+                  </label>
+                  <Button onClick={() => saveReminder(reminderValue)} disabled={busy || !reminderValue}>
+                    שמירה
+                  </Button>
+                  <Button variant="ghost" onClick={() => setReminderOpen(false)}>
+                    ביטול
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div data-testid="photos">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold text-ink-700">תמונות{photos.length > 0 && ` (${photos.length})`}</span>
@@ -473,6 +538,8 @@ export function eventText(ev: TaskEvent): string {
       return "הוסיף תמונה";
     case "photo_removed":
       return "מחק תמונה";
+    case "reminder":
+      return "תזכורת";
     default:
       return ev.type;
   }

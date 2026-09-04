@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import type { Task } from "@shared/types";
+import type { Task, TaskPriority } from "@shared/types";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Field, inputCls } from "./ui";
-import { WEEKDAYS_SHORT } from "../format";
+import { PRIORITY_HINT, PRIORITY_LABEL, WEEKDAYS_SHORT } from "../format";
 
 interface Props {
   defaultAssigneeId: number;
@@ -26,6 +26,9 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
   const [recurring, setRecurring] = useState(forceRecurring);
   const [weekdays, setWeekdays] = useState<number[]>([0, 1, 2, 3, 4]);
   const [leads, setLeads] = useState(false);
+  const [priority, setPriority] = useState<TaskPriority>(existing?.priority ?? "normal");
+  const [notifyNow, setNotifyNow] = useState(false);
+  const isManager = s.user.role !== "employee";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,10 +42,19 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
     setError("");
     try {
       if (existing) {
-        await api.updateTask(existing.id, { title, details, dueDate, assigneeId });
+        await api.updateTask(existing.id, { title, details, dueDate, assigneeId, ...(existing.recurringId ? {} : { priority }) });
       } else {
         if (recurring && weekdays.length === 0) throw new Error("יש לבחור לפחות יום אחד");
-        await api.createTask({ title, details, assigneeId, dueDate, weekdays: recurring ? weekdays : [], kind: recurring && leads ? "leads" : "normal" });
+        await api.createTask({
+          title,
+          details,
+          assigneeId,
+          dueDate,
+          weekdays: recurring ? weekdays : [],
+          kind: recurring && leads ? "leads" : "normal",
+          priority: recurring ? "normal" : priority,
+          notifyNow: !recurring && isManager && notifyNow && assigneeId !== s.user.id,
+        });
       }
       onSaved();
     } catch (err) {
@@ -84,6 +96,45 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
         </Field>
       </div>
 
+      {!recurring && !existing?.recurringId && (
+        <fieldset>
+          <legend className="mb-1 block text-sm font-semibold text-ink-700">חשיבות</legend>
+          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" data-testid="priority">
+            {(["urgent", "high", "normal"] as TaskPriority[]).map((p) => (
+              <button
+                key={p}
+                type="button"
+                role="radio"
+                aria-checked={priority === p}
+                onClick={() => {
+                  setPriority(p);
+                  if (p === "urgent" && isManager) setNotifyNow(true);
+                }}
+                className={`rounded-lg border px-2 py-2 text-sm font-semibold ${
+                  priority === p
+                    ? p === "urgent"
+                      ? "border-red-600 bg-red-600 text-white"
+                      : p === "high"
+                        ? "border-amber-500 bg-amber-500 text-white"
+                        : "border-slate-600 bg-slate-600 text-white"
+                    : "border-slate-300 bg-white text-ink-700"
+                }`}
+              >
+                {PRIORITY_LABEL[p]}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">{PRIORITY_HINT[priority]}</p>
+        </fieldset>
+      )}
+      {!existing && !recurring && isManager && assigneeId !== s.user.id && (
+        <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-ink-700">
+          <input type="checkbox" className="mt-0.5 size-4 accent-brand-600" checked={notifyNow} onChange={(e) => setNotifyNow(e.target.checked)} data-testid="notify-now" />
+          <span>
+            <b>שלח הודעה מיידית</b> ל{s.nameOf(assigneeId)} עם פירוט המשימה (וואטסאפ + התראה), בלי לחכות להודעה המרוכזת.
+          </span>
+        </label>
+      )}
       {!s.canSee(assigneeId) && (
         <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
           המשימה תופיע אצל {s.nameOf(assigneeId)} כבקשה ממך. תוכל לעקוב אחרי הסטטוס שלה ב"משימות ששלחתי לאחרים", בלי לראות את שאר הלו"ז.

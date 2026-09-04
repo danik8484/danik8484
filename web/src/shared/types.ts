@@ -1,13 +1,14 @@
 export type Role = "admin" | "manager" | "employee";
 export type TaskStatus = "open" | "in_progress" | "done";
 export type TaskKind = "normal" | "leads";
+export type TaskPriority = "urgent" | "high" | "normal";
 
 /** A closed deal recorded on a leads task. */
 export interface Deal {
   name: string;
   amount: number | null;
 }
-export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed";
+export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder";
 
 export interface PublicUser {
   id: number;
@@ -34,6 +35,9 @@ export interface Task {
   completedById: number | null;
   recurringId: number | null;
   kind: TaskKind;
+  priority: TaskPriority;
+  reminderAt: string | null; // ISO instant; message every 30 min from then until done
+  reminderLastSentAt: string | null;
   metricDeals: number | null;
   metricCalls: number | null;
   deals: Deal[]; // TODO(DND CASH): connect closed deals to the DND CASH system
@@ -110,4 +114,24 @@ export interface LogEntry extends TaskEvent {
 
 export interface ApiError {
   error: string;
+}
+
+/** Admin-editable integration settings, stored in the database (never in the repository). */
+export interface AppSettings {
+  telegramBotToken: string;
+  telegramChatId: string;
+  telegramNotifyOwnActions: boolean;
+  whatsappToken: string;
+  whatsappPhoneId: string;
+  whatsappTemplate: string; // utility template with one {{1}} body parameter
+  whatsappLoginTemplate: string; // authentication template (code in body + copy-code button)
+  whatsappLang: string;
+  /** Daily reminder time per weekday (0 = Sunday), "HH:MM" or "" for none. Saturday is the "plan the week" reminder. */
+  reminderTimes: string[];
+}
+
+export interface AuthConfig {
+  team: { id: number; name: string }[];
+  whatsapp: boolean;
+  email: boolean;
 }

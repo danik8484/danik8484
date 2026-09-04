@@ -7,7 +7,7 @@ import { Button, ErrorText, Modal, PersonTag, Spinner, StatusIcon } from "../com
 import TaskForm from "../components/TaskForm";
 import TaskSheet from "../components/TaskSheet";
 import { PushBanner } from "../components/PushSettings";
-import { ROLE_LABEL, addDays, daysBetween, fmtDateLong, fmtDateShort, isoValid } from "../format";
+import { PRIORITY_ORDER, ROLE_LABEL, addDays, daysBetween, fmtDateLong, fmtDateShort, isoValid } from "../format";
 import { taskTier } from "@shared/permissions";
 
 export default function Board() {
@@ -19,7 +19,11 @@ export default function Board() {
   const [sent, setSent] = useState<Task[]>([]);
   const [error, setError] = useState("");
   const [addFor, setAddFor] = useState<number | null>(null);
-  const [openTask, setOpenTask] = useState<number | null>(null);
+  const [openTask, setOpenTask] = useState<number | null>(() => {
+    // Deep link from notifications: /?task=123
+    const t = Number(new URLSearchParams(window.location.search).get("task"));
+    return Number.isInteger(t) && t > 0 ? t : null;
+  });
   const [showUpcoming, setShowUpcoming] = useState(false);
 
   const load = useCallback(async () => {
@@ -246,11 +250,15 @@ function UserCard({
   const open = tasks.filter((t) => t.status === "open");
   const inProgress = tasks.filter((t) => t.status === "in_progress");
   const done = tasks.filter((t) => t.status === "done");
+  const byPriority = (a: Task, b: Task) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
   const active = [...inProgress, ...open];
-  // Order inside the card: management first, own tasks, then requests from teammates in a separate section.
-  const fromManagement = active.filter((t) => taskTier(t, s.users) === 0);
-  const own = active.filter((t) => taskTier(t, s.users) === 1);
-  const fromPeers = active.filter((t) => taskTier(t, s.users) === 2);
+  // Urgent tasks always come first, whoever added them; then management, own, and requests from teammates,
+  // each group with high priority before normal.
+  const urgent = active.filter((t) => t.priority === "urgent");
+  const rest = active.filter((t) => t.priority !== "urgent");
+  const fromManagement = rest.filter((t) => taskTier(t, s.users) === 0).sort(byPriority);
+  const own = rest.filter((t) => taskTier(t, s.users) === 1).sort(byPriority);
+  const fromPeers = rest.filter((t) => taskTier(t, s.users) === 2).sort(byPriority);
   const showHeaders = [fromManagement, own, fromPeers].filter((g) => g.length > 0).length > 1;
 
   return (
@@ -311,6 +319,13 @@ function UserCard({
       {visible && (
         <div className="px-1 py-1">
           {tasks.length === 0 && <p className="px-3 py-4 text-center text-sm text-slate-400">אין משימות ליום זה</p>}
+          {urgent.length > 0 && (
+            <ul className="mx-1 mb-1 rounded-xl border border-red-200 bg-red-50/60" data-testid={`group-urgent-${user.id}`}>
+              {urgent.map((t) => (
+                <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
+              ))}
+            </ul>
+          )}
           {fromManagement.length > 0 && (
             <>
               {showHeaders && <GroupHeader>מההנהלה</GroupHeader>}
@@ -378,7 +393,11 @@ function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onO
           <StatusIcon status={task.status} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className={`block text-sm font-semibold ${task.status === "done" ? "text-slate-400 line-through" : "text-ink-900"}`}>
+          <span
+            className={`block text-sm ${task.status === "done" ? "font-semibold text-slate-400 line-through" : task.priority === "urgent" ? "font-black text-red-700" : task.priority === "high" ? "font-extrabold text-ink-900" : "font-semibold text-ink-900"}`}
+          >
+            {task.priority === "urgent" && task.status !== "done" && <span aria-label="דחוף">🚨 </span>}
+            {task.priority === "high" && task.status !== "done" && <span aria-label="עדיפות גבוהה">⬆️ </span>}
             {task.title}
             {byOther && (
               <>

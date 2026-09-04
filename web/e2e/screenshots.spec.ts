@@ -1,15 +1,23 @@
 import { test, type Browser } from "@playwright/test";
 
+const NAME: Record<string, string> = {
+  "dani@example.com": "דני שקנבסקי",
+  "ron@example.com": "רון וליצ'קו",
+  "uri.s@example.com": "אורי שפירא",
+  "dani.k@example.com": "דני קגנוביץ",
+  "uri.h@example.com": "אורי חסקל",
+};
+
 const OUT = process.env.SHOT_DIR || "screenshots";
 
 async function login(browser: Browser, email: string) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto("/");
-  await page.getByLabel("כתובת מייל").fill(email);
-  await page.getByRole("button", { name: "שלח לי קוד" }).click();
+  await page.getByTestId("team-picker").getByRole("button", { name: NAME[email], exact: true }).click();
+  await page.getByRole("button", { name: "שלח לי קוד לוואטסאפ" }).click();
   const code = (await page.getByTestId("dev-code").locator("b").textContent())!.trim();
-  await page.getByLabel("קוד כניסה").fill(code);
+  await page.getByLabel("קוד אימות").fill(code);
   await page.getByRole("button", { name: "כניסה" }).click();
   await page.getByTestId("card-1").waitFor();
   await page.waitForTimeout(400);

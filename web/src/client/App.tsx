@@ -9,6 +9,7 @@ import Board from "./pages/Board";
 import Recurring from "./pages/Recurring";
 import Log from "./pages/Log";
 import Users from "./pages/Users";
+import Settings from "./pages/Settings";
 import { PushToggle } from "./components/PushSettings";
 import { disablePush, resyncPush } from "./push";
 
@@ -72,6 +73,7 @@ export default function App() {
           <Route path="/recurring" element={<Recurring />} />
           <Route path="/log" element={session.user.role === "employee" ? <Navigate to="/" replace /> : <Log />} />
           <Route path="/users" element={session.user.role === "admin" ? <Users /> : <Navigate to="/" replace />} />
+          <Route path="/settings" element={session.user.role === "admin" ? <Settings /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
@@ -100,7 +102,7 @@ function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: (
           { to: "/", label: "לו\"ז" },
           { to: "/recurring", label: "משימות קבועות" },
           ...(session.user.role !== "employee" ? [{ to: "/log", label: "יומן פעילות" }] : []),
-          ...(session.user.role === "admin" ? [{ to: "/users", label: "אנשי צוות" }] : []),
+          ...(session.user.role === "admin" ? [{ to: "/users", label: "אנשי צוות" }, { to: "/settings", label: "הגדרות" }] : []),
         ];
         const linkCls = ({ isActive }: { isActive: boolean }) =>
           `rounded-lg px-3 py-2 text-sm font-semibold transition ${isActive ? "bg-white/15 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`;

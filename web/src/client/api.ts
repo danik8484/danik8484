@@ -1,4 +1,6 @@
-import type { Attachment, BoardResponse, Deal, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskStatus } from "@shared/types";
+import type { AppSettings, Attachment, AuthConfig, BoardResponse, Deal, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskPriority, TaskStatus } from "@shared/types";
+
+export type ClientSettings = AppSettings & { telegramConfigured: boolean; whatsappConfigured: boolean };
 
 export class ApiError extends Error {
   status: number;
@@ -22,21 +24,31 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 }
 
 export const api = {
+  authConfig: () => request<AuthConfig>("GET", "/api/auth/config"),
   requestCode: (email: string) => request<{ ok: true; devCode?: string }>("POST", "/api/auth/request-code", { email }),
+  requestUserCode: (userId: number) => request<{ ok: true; to: string; devCode?: string }>("POST", "/api/auth/request-code", { userId }),
   verifyCode: (email: string, code: string) => request<{ ok: true }>("POST", "/api/auth/verify", { email, code }),
+  verifyUserCode: (userId: number, code: string) => request<{ ok: true }>("POST", "/api/auth/verify", { userId, code }),
   logout: () => request<{ ok: true }>("POST", "/api/auth/logout"),
   loginWithLink: (token: string) => request<{ ok: true }>("POST", "/api/auth/link", { token }),
   loginLink: (userId: number) => request<{ ok: true; url: string; expiresAt: number }>("POST", `/api/users/${userId}/login-link`),
   me: () => request<MeResponse>("GET", "/api/me"),
   board: (date: string) => request<BoardResponse>("GET", `/api/tasks/board?date=${date}`),
   task: (id: number) => request<TaskDetailResponse>("GET", `/api/tasks/${id}`),
-  createTask: (input: { title: string; details: string; assigneeId: number; dueDate: string; weekdays?: number[]; kind?: "normal" | "leads" }) =>
+  createTask: (input: { title: string; details: string; assigneeId: number; dueDate: string; weekdays?: number[]; kind?: "normal" | "leads"; priority?: TaskPriority; notifyNow?: boolean }) =>
     request<{ ok: true; task?: Task; recurringId?: number }>("POST", "/api/tasks", input),
-  updateTask: (id: number, input: { title?: string; details?: string; dueDate?: string; assigneeId?: number }) =>
+  updateTask: (id: number, input: { title?: string; details?: string; dueDate?: string; assigneeId?: number; priority?: TaskPriority }) =>
     request<{ ok: true; task: Task }>("PATCH", `/api/tasks/${id}`, input),
   setStatus: (id: number, status: TaskStatus, note: string, metrics?: { deals?: Deal[]; metricCalls?: number | null }) =>
     request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/status`, { status, note, ...(metrics ?? {}) }),
   deleteTask: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/tasks/${id}`, { reason }),
+  setReminder: (id: number, reminderAt: string | null) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/reminder`, { reminderAt }),
+  settings: () => request<ClientSettings>("GET", "/api/settings"),
+  saveSettings: (input: Partial<AppSettings>) => request<{ ok: true; settings: ClientSettings }>("PUT", "/api/settings", input),
+  resetReminders: () => request<{ ok: true; settings: ClientSettings }>("POST", "/api/settings/reset-reminders"),
+  telegramChats: () => request<{ chats: { id: string; name: string }[] }>("GET", "/api/settings/telegram/chats"),
+  telegramTest: () => request<{ ok: true }>("POST", "/api/settings/telegram/test"),
+  whatsappTest: (phone?: string) => request<{ ok: true }>("POST", "/api/settings/whatsapp/test", { phone }),
   uploadPhoto: async (taskId: number, blob: Blob, name: string, width: number, height: number) => {
     const res = await fetch(`/api/tasks/${taskId}/photos`, {
       method: "POST",

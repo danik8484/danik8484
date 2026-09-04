@@ -11,7 +11,8 @@ import { recurringRoutes } from "./routes/recurring";
 import { userRoutes } from "./routes/users";
 import { photoRoutes } from "./routes/photos";
 import { pushRoutes } from "./routes/push";
-import { flushDigests, sendDayEndReminders } from "./notify";
+import { flushDigests, sendDayEndReminders, sendTaskReminders } from "./notify";
+import { settingsRoutes } from "./routes/settings";
 import { BadRequest } from "./validate";
 import { appMeta } from "./db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -81,17 +82,19 @@ app.route("/api/recurring", recurringRoutes);
 app.route("/api/users", userRoutes);
 app.route("/api", photoRoutes);
 app.route("/api/push", pushRoutes);
+app.route("/api/settings", settingsRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "לא נמצא" }, 404));
 
-export async function runScheduled(env: Env, force = false): Promise<{ created: number; digests: number; reminders: number }> {
+export async function runScheduled(env: Env, force = false): Promise<{ created: number; digests: number; reminders: number; taskReminders: number }> {
   await ensureSchema(env);
   const db = getDb(env.DB);
   const appUrl = env.APP_URL || "";
   const created = await materializeRecurring(db, localDate(env.TIMEZONE));
   const digests = await flushDigests(env, db, appUrl, Date.now(), force);
-  const reminders = await sendDayEndReminders(env, db, appUrl);
-  return { created, digests, reminders };
+  const reminders = await sendDayEndReminders(env, db, appUrl, new Date(), force);
+  const taskReminders = await sendTaskReminders(env, db, appUrl);
+  return { created, digests, reminders, taskReminders };
 }
 
 export default {

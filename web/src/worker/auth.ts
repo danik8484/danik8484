@@ -54,6 +54,44 @@ export async function findUserByEmail(db: Db, env: Env, email: string) {
 
 export type RequestCodeResult = { ok: true; devCode?: string } | { ok: false; error: string; status: number };
 
+/** Create a fresh code for an identifier ("email" or "user:<id>"), enforcing the hourly limit. */
+export async function issueCode(db: Db, key: string): Promise<{ ok: true; code: string } | { ok: false; error: string; status: number }> {
+  const now = Date.now();
+  const recent = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(loginCodes)
+    .where(and(eq(loginCodes.email, key), gt(loginCodes.createdAt, now - 60 * 60 * 1000)))
+    .get();
+  if ((recent?.n ?? 0) >= MAX_CODES_PER_HOUR) return { ok: false, error: "יותר מדי בקשות. נסה שוב בעוד שעה.", status: 429 };
+  const code = randomCode();
+  await db.insert(loginCodes).values({ email: key, codeHash: await sha256(key + ":" + code), expiresAt: now + CODE_TTL_MS, createdAt: now }).run();
+  return { ok: true, code };
+}
+
+/** Check a code for an identifier: atomic attempt cap, single use. */
+export async function checkCode(db: Db, key: string, code: string): Promise<boolean> {
+  const now = Date.now();
+  const row = await db
+    .select()
+    .from(loginCodes)
+    .where(and(eq(loginCodes.email, key), eq(loginCodes.used, 0), gt(loginCodes.expiresAt, now)))
+    .orderBy(desc(loginCodes.createdAt))
+    .get();
+  if (!row) return false;
+  const bumped = await db
+    .update(loginCodes)
+    .set({ attempts: sql`${loginCodes.attempts} + 1` })
+    .where(and(eq(loginCodes.id, row.id), lt(loginCodes.attempts, MAX_ATTEMPTS)))
+    .returning({ id: loginCodes.id })
+    .get();
+  if (!bumped) return false;
+  if ((await sha256(key + ":" + code.trim())) !== row.codeHash) return false;
+  const consumed = await db.update(loginCodes).set({ used: 1 }).where(and(eq(loginCodes.id, row.id), eq(loginCodes.used, 0))).returning({ id: loginCodes.id }).get();
+  if (!consumed) return false;
+  await db.delete(loginCodes).where(lt(loginCodes.expiresAt, now - 24 * 60 * 60 * 1000)).run();
+  return true;
+}
+
 export async function requestCode(db: Db, env: Env, email: string): Promise<RequestCodeResult> {
   const now = Date.now();
   // Rate limit first, for every address alike, so the response cannot reveal whether an address is registered.

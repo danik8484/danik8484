@@ -4,13 +4,20 @@ import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
 import { listAttachments, photoCounts } from "./photos";
-import { queueTaskNotification } from "../notify";
+import { adminFeedFor, notifyTaskNow, queueTaskNotification } from "../notify";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
 import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
-import type { BoardResponse, TaskStatus } from "@shared/types";
+import type { BoardResponse, TaskPriority, TaskStatus } from "@shared/types";
+
+const PRIORITIES: TaskPriority[] = ["urgent", "high", "normal"];
+const PRIORITY_NOTE: Record<TaskPriority, string> = { urgent: "חשיבות: 🚨 דחוף", high: "חשיבות: ⬆️ עדיפות גבוהה", normal: "" };
+function parsePriority(v: unknown): TaskPriority | null {
+  if (v === undefined || v === null || v === "") return "normal";
+  return PRIORITIES.includes(v as TaskPriority) ? (v as TaskPriority) : null;
+}
 
 export const taskRoutes = new Hono<AppEnv>();
 
@@ -96,6 +103,8 @@ taskRoutes.post("/", async (c) => {
   const today = localDate(c.env.TIMEZONE);
 
   const kind = body.kind === "leads" ? "leads" : "normal";
+  const priority = parsePriority(body.priority);
+  if (priority === null) return c.json({ error: "חשיבות לא תקינה" }, 400);
   if (wds.length > 0) {
     const rec = await db
       .insert(recurringTasks)
@@ -111,11 +120,15 @@ taskRoutes.post("/", async (c) => {
 
   const row = await db
     .insert(tasks)
-    .values({ title, details, assigneeId, createdById: me.id, dueDate, createdDate: today, kind })
+    .values({ title, details, assigneeId, createdById: me.id, dueDate, createdDate: today, kind, priority })
     .returning()
     .get();
-  await db.insert(taskEvents).values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open" }).run();
-  await queueTaskNotification(db, assigneeId, me.id, row.id);
+  await db.insert(taskEvents).values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open", note: priority !== "normal" ? PRIORITY_NOTE[priority] : "" }).run();
+  // Managers may send the full task right now instead of waiting for the batched digest.
+  const notifyNow = body.notifyNow === true && me.role !== "employee" && assigneeId !== me.id;
+  if (notifyNow) c.executionCtx.waitUntil(notifyTaskNow(c.env, db, row, new URL(c.req.url).origin));
+  else await queueTaskNotification(db, assigneeId, me.id, row.id);
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, row.id, me, "created", { extra: notifyNow ? "נשלחה הודעה מיידית" : undefined }));
   return c.json({ ok: true, task: toTask(row) }, 201);
 });
 
@@ -205,6 +218,8 @@ taskRoutes.post("/:id/status", async (c) => {
     patch.completedAt = now;
     patch.completedDate = today;
     patch.completedById = me.id;
+    patch.reminderAt = null; // a reminder stops the moment the task is done
+    patch.reminderLastSentAt = null;
   } else {
     patch.status = status;
     patch.completedAt = null;
@@ -224,6 +239,35 @@ taskRoutes.post("/:id/status", async (c) => {
       note: [note ?? "", metricNotes.join(" · ")].filter(Boolean).join("\n"),
     })
     .run();
+  const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
+  c.executionCtx.waitUntil(
+    adminFeedFor(c.env, db, id, me, changed ? "status" : "note", { note: [note ?? "", metricNotes.join(" · ")].filter(Boolean).join(" · "), fromStatus: row.status, toStatus: status }),
+  );
+  return c.json({ ok: true, task: toTask(updated!) });
+});
+
+/** Set or clear a reminder: the assignee gets a message at that time and every 30 minutes until done. */
+taskRoutes.post("/:id/reminder", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user");
+  const id = int(c.req.param("id"));
+  const body = await readJson(c.req.raw);
+  if (id === null) return c.json({ error: "לא נמצא" }, 404);
+  const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
+  if (!row) return c.json({ error: "לא נמצא" }, 404);
+  if (!canManage(toPublicUser(me, false), row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  if (row.status === "done") return c.json({ error: "המשימה כבר הושלמה" }, 400);
+  let reminderAt: string | null = null;
+  if (body.reminderAt !== null && body.reminderAt !== undefined && body.reminderAt !== "") {
+    const d = new Date(String(body.reminderAt));
+    if (Number.isNaN(d.getTime())) return c.json({ error: "תאריך ושעה לא תקינים" }, 400);
+    if (d.getTime() < Date.now() - 5 * 60 * 1000) return c.json({ error: "התזכורת חייבת להיות בעתיד" }, 400);
+    reminderAt = d.toISOString();
+  }
+  await db.update(tasks).set({ reminderAt, reminderLastSentAt: null, reminderById: reminderAt ? me.id : null, updatedAt: nowIso() }).where(eq(tasks.id, id)).run();
+  const when = reminderAt ? new Intl.DateTimeFormat("he-IL", { timeZone: c.env.TIMEZONE, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(reminderAt)) : "";
+  await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "reminder", note: reminderAt ? `תזכורת ל-${when}` : "התזכורת בוטלה" }).run();
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "reminder", { extra: reminderAt ? `תזכורת ל-${when} (כל חצי שעה עד שמסמנים הושלם)` : "התזכורת בוטלה" }));
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
   return c.json({ ok: true, task: toTask(updated!) });
 });
@@ -269,6 +313,15 @@ taskRoutes.patch("/:id", async (c) => {
       changes.push(`תאריך: ${row.dueDate} ← ${body.dueDate}`);
     }
   }
+  if (body.priority !== undefined) {
+    const priority = parsePriority(body.priority);
+    if (priority === null) return c.json({ error: "חשיבות לא תקינה" }, 400);
+    if (row.recurringId && priority !== "normal") return c.json({ error: "למשימה קבועה (יומית) אין חשיבות מיוחדת" }, 400);
+    if (priority !== row.priority) {
+      patch.priority = priority;
+      changes.push(`חשיבות: ${PRIORITY_NOTE[priority] || "רגיל"}`.replace("חשיבות: חשיבות: ", "חשיבות: "));
+    }
+  }
   let reassignedTo: number | null = null;
   if (body.assigneeId !== undefined) {
     const assigneeId = int(body.assigneeId);
@@ -294,6 +347,7 @@ taskRoutes.patch("/:id", async (c) => {
     await queueTaskNotification(db, reassignedTo, me.id, id);
   }
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, reassignedTo !== null ? "reassigned" : "edited", { extra: changes.join(" · ") || undefined }));
   return c.json({ ok: true, task: toTask(updated!) });
 });
 
@@ -313,6 +367,7 @@ taskRoutes.delete("/:id", async (c) => {
   const now = nowIso();
   await db.update(tasks).set({ deletedAt: now, deletedById: me.id, deleteReason: reason, updatedAt: now }).where(eq(tasks.id, id)).run();
   await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "deleted", fromStatus: row.status, note: reason }).run();
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "deleted", { extra: `סיבה: ${reason}` }));
   return c.json({ ok: true });
 });
 
