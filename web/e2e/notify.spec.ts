@@ -78,17 +78,44 @@ test("leads task carries deal/call counts, optional", async ({ request }) => {
   const inst = board.tasks.find((t: { kind: string; assigneeId: number }) => t.kind === "leads" && t.assigneeId === 2);
   if (inst) {
     const r = await request.post(`/api/tasks/${inst.id}/status`, {
-      data: { status: "done", note: "", deals: [{ name: "דוד", amount: 1200 }, { name: "מיה", amount: null }, { name: "יוסי", amount: "800" }], metricCalls: 25 },
+      data: {
+        status: "done",
+        note: "",
+        deals: [
+          { name: "דוד לוי", amount: 1200, method: "credit_card" },
+          { name: "מיה כהן", amount: "800", method: "cash" },
+          { name: "יוסי אברהם", amount: 450.5, method: "paypal" },
+        ],
+        metricCalls: 25,
+      },
     });
     expect(r.status()).toBe(200);
     const detail = await (await request.get(`/api/tasks/${inst.id}`)).json();
     expect(detail.task.metricDeals).toBe(3);
-    expect(detail.task.deals).toEqual([{ name: "דוד", amount: 1200 }, { name: "מיה", amount: null }, { name: "יוסי", amount: 800 }]);
+    expect(detail.task.deals).toEqual([
+      { name: "דוד לוי", amount: 1200, method: "credit_card" },
+      { name: "מיה כהן", amount: 800, method: "cash" },
+      { name: "יוסי אברהם", amount: 450.5, method: "paypal" },
+    ]);
     expect(detail.task.metricCalls).toBe(25);
-    expect(detail.events.some((e: { note: string }) => e.note.includes("נסלקים: 3") && e.note.includes("דוד 1200₪"))).toBeTruthy();
-    // Validation: a deal without a name, a fractional call count
-    expect((await request.post(`/api/tasks/${inst.id}/status`, { data: { status: "done", note: "", deals: [{ name: "", amount: 5 }] } })).status()).toBe(400);
+    expect(detail.events.some((e: { note: string }) => e.note.includes("נסלקים: 3") && e.note.includes("דוד לוי 1200₪ כרטיס אשראי"))).toBeTruthy();
+    // Every deal needs a full name, an amount and a payment method
+    expect((await request.post(`/api/tasks/${inst.id}/status`, { data: { status: "done", note: "", deals: [{ name: "דוד", amount: 5, method: "cash" }] } })).status()).toBe(400);
+    expect((await request.post(`/api/tasks/${inst.id}/status`, { data: { status: "done", note: "", deals: [{ name: "דוד לוי", amount: "", method: "cash" }] } })).status()).toBe(400);
+    expect((await request.post(`/api/tasks/${inst.id}/status`, { data: { status: "done", note: "", deals: [{ name: "דוד לוי", amount: 5, method: "check" }] } })).status()).toBe(400);
     expect((await request.post(`/api/tasks/${inst.id}/status`, { data: { status: "done", note: "", metricCalls: 3.5 } })).status()).toBe(400);
+    // The deals page lists them with totals, per visible person
+    const page = await (await request.get(`/api/deals?from=${inst.dueDate}&to=${inst.dueDate}`)).json();
+    const mine = page.deals.filter((d: { taskId: number }) => d.taskId === inst.id);
+    expect(mine).toHaveLength(3);
+    expect(page.byMethod.credit_card.amount).toBeGreaterThanOrEqual(1200);
+    // Uri Haskel (not in Ron's view) cannot see Ron's deals
+    await request.post("/api/auth/logout");
+    await apiLogin(request, "uri.h@example.com");
+    const other = await (await request.get(`/api/deals?from=${inst.dueDate}&to=${inst.dueDate}`)).json();
+    expect(other.deals.some((d: { taskId: number }) => d.taskId === inst.id)).toBeFalsy();
+    await request.post("/api/auth/logout");
+    await apiLogin(request, "ron@example.com");
     // Done without any metrics is fine too (recurring: employee may reopen/close)
     expect((await request.post(`/api/tasks/${inst.id}/status`, { data: { status: "open", note: "", deals: [], metricCalls: null } })).status()).toBe(200);
     expect((await (await request.get(`/api/tasks/${inst.id}`)).json()).task.deals).toEqual([]);

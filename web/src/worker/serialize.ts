@@ -1,4 +1,4 @@
-import type { PublicUser, Task, TaskEvent, RecurringTask, TaskStatus, EventType, Attachment, Deal } from "@shared/types";
+import { PAYMENT_METHODS, type PublicUser, type Task, type TaskEvent, type RecurringTask, type TaskStatus, type EventType, type Attachment, type Deal, type PaymentMethod } from "@shared/types";
 import type { UserRow, TaskRow, TaskEventRow, RecurringRow, AttachmentRow } from "./db/schema";
 
 export function parseDeals(json: string | null): Deal[] {
@@ -8,7 +8,11 @@ export function parseDeals(json: string | null): Deal[] {
     if (!Array.isArray(arr)) return [];
     return arr
       .filter((d) => d && typeof d.name === "string")
-      .map((d) => ({ name: String(d.name), amount: typeof d.amount === "number" && Number.isFinite(d.amount) ? d.amount : null }));
+      .map((d) => ({
+        name: String(d.name),
+        amount: typeof d.amount === "number" && Number.isFinite(d.amount) ? d.amount : 0,
+        method: (PAYMENT_METHODS as readonly string[]).includes(d.method) ? (d.method as PaymentMethod) : "",
+      }));
   } catch {
     return [];
   }

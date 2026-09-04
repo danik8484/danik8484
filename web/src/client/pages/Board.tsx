@@ -410,13 +410,7 @@ function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onO
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
             {task.recurringId && <span className="text-sky-700">קבועה</span>}
             {!!task.photoCount && <span title="תמונות">📷 {task.photoCount}</span>}
-            {task.kind === "leads" && (task.metricDeals != null || task.metricCalls != null) && (
-              <span className="font-semibold text-emerald-700">
-                {task.metricDeals != null && `נסלקים: ${task.metricDeals}`}
-                {task.metricDeals != null && task.metricCalls != null && " · "}
-                {task.metricCalls != null && `שיחות: ${task.metricCalls}`}
-              </span>
-            )}
+            {task.kind === "leads" && task.metricCalls != null && <span className="font-semibold text-emerald-700">שיחות: {task.metricCalls}</span>}
             {overdue > 0 && <span className="font-semibold text-red-600">נגררת {overdue} ימים</span>}
             {task.status === "done" && task.completedAt && <span className="text-brand-700">הושלם {new Date(task.completedAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>}
           </span>

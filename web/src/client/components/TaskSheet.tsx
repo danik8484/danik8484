@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Attachment, Deal, Task, TaskEvent, TaskStatus } from "@shared/types";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type Attachment, type Deal, type PaymentMethod, type Task, type TaskEvent, type TaskStatus } from "@shared/types";
+
+type DealDraft = { name: string; amount: string; method: PaymentMethod | "" };
 import { canEditOrDelete, canMarkDone, noteRequiredForInProgress, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
@@ -25,7 +27,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const fileInput = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<TaskStatus>("open");
   const [note, setNote] = useState("");
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const [deals, setDeals] = useState<DealDraft[]>([]);
   const [dealsOpen, setDealsOpen] = useState(false);
   const [calls, setCalls] = useState<string>("");
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
@@ -43,7 +45,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setPhotos(res.attachments);
     setStatus(res.task.status);
     setNote(res.task.status === "in_progress" ? res.task.progressNote : "");
-    setDeals(res.task.deals);
+    setDeals(res.task.deals.map((d) => ({ name: d.name, amount: d.amount ? String(d.amount) : "", method: d.method })));
     setDealsOpen(res.task.deals.length > 0);
     setCalls(res.task.metricCalls == null ? "" : String(res.task.metricCalls));
   }, [taskId]);
@@ -62,7 +64,10 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const canDone = task ? canMarkDone(s.user, task, s.users) : false;
   const noteRequired = task ? noteRequiredForInProgress(task) : true;
   const tier = task ? taskTier(task, s.users) : 1;
-  const cleanDeals = deals.filter((d) => d.name.trim() !== "");
+  const cleanDeals: Deal[] = deals
+    .filter((d) => d.name.trim() !== "" || d.amount !== "" || d.method !== "")
+    .map((d) => ({ name: d.name.trim(), amount: d.amount === "" ? 0 : Number(d.amount), method: d.method }));
+  const dealsIncomplete = cleanDeals.some((d) => d.name.split(/\s+/).length < 2 || !(d.amount > 0) || !d.method);
   const metricsDirty = task ? task.kind === "leads" && (JSON.stringify(cleanDeals) !== JSON.stringify(task.deals) || calls !== (task.metricCalls == null ? "" : String(task.metricCalls))) : false;
   const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") || metricsDirty : false;
 
@@ -71,7 +76,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setBusy(true);
     setError("");
     try {
-      await api.setStatus(task.id, status, note, task.kind === "leads" ? { deals: cleanDeals.map((d) => ({ name: d.name.trim(), amount: d.amount })), metricCalls: calls === "" ? null : Number(calls) } : undefined);
+      if (task.kind === "leads" && dealsIncomplete) throw new Error("לכל נסלק חובה שם מלא, סכום ואמצעי תשלום");
+      await api.setStatus(task.id, status, note, task.kind === "leads" ? { deals: cleanDeals, metricCalls: calls === "" ? null : Number(calls) } : undefined);
       await load();
       setNote(status === "in_progress" ? note : "");
       onChanged();
@@ -245,8 +251,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                     <ul className="mt-1 list-disc ps-5 text-xs">
                       {task.deals.map((d, i) => (
                         <li key={i}>
-                          {d.name}
-                          {d.amount != null && ` · ${d.amount.toLocaleString("he-IL")} ₪`}
+                          {d.name} · {d.amount.toLocaleString("he-IL")} ₪{d.method && ` · ${PAYMENT_METHOD_LABEL[d.method]}`}
                         </li>
                       ))}
                     </ul>
@@ -326,7 +331,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                           className="px-3 py-1.5"
                           onClick={() => {
                             setDealsOpen(true);
-                            if (deals.length === 0) setDeals([{ name: "", amount: null }]);
+                            if (deals.length === 0) setDeals([{ name: "", amount: "", method: "" }]);
                           }}
                         >
                           + הוספת נסלק
@@ -334,41 +339,57 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                       )}
                     </div>
                     {dealsOpen && (
-                      <div className="mt-2 space-y-2">
+                      <div className="mt-2 space-y-3">
                         {deals.map((d, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                            <input
-                              className={inputCls}
-                              placeholder="שם לקוח"
-                              value={d.name}
-                              onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-                              data-testid={`deal-name-${i}`}
-                            />
+                          <div key={i} className="rounded-xl border border-emerald-200 bg-white p-2">
+                            <div className="flex items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <input
+                                  className={inputCls}
+                                  placeholder="שם מלא של הלקוח"
+                                  value={d.name}
+                                  onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                                  data-testid={`deal-name-${i}`}
+                                />
+                              </div>
+                              <div className="w-28 shrink-0">
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={1}
+                                  className={inputCls}
+                                  placeholder="סכום ₪"
+                                  value={d.amount}
+                                  onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))}
+                                  data-testid={`deal-amount-${i}`}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                className="grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                                aria-label="הסרת נסלק"
+                                onClick={() => setDeals((arr) => arr.filter((_, j) => j !== i))}
+                              >
+                                ✕
+                              </button>
                             </div>
-                            <div className="w-28 shrink-0">
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min={0}
-                              className={inputCls}
-                              placeholder="סכום ₪"
-                              value={d.amount ?? ""}
-                              onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, amount: e.target.value === "" ? null : Number(e.target.value) } : x)))}
-                              data-testid={`deal-amount-${i}`}
-                            />
-                            </div>
-                            <button
-                              type="button"
-                              className="grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
-                              aria-label="הסרת נסלק"
-                              onClick={() => setDeals((arr) => arr.filter((_, j) => j !== i))}
+                            <select
+                              className={`${inputCls} mt-2`}
+                              value={d.method}
+                              onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, method: e.target.value as PaymentMethod | "" } : x)))}
+                              data-testid={`deal-method-${i}`}
                             >
-                              ✕
-                            </button>
+                              <option value="">אמצעי תשלום...</option>
+                              {PAYMENT_METHODS.map((m) => (
+                                <option key={m} value={m}>
+                                  {PAYMENT_METHOD_LABEL[m]}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         ))}
-                        <button type="button" className="text-sm font-semibold text-brand-700" onClick={() => setDeals((arr) => [...arr, { name: "", amount: null }])} data-testid="deal-add">
+                        {dealsIncomplete && <p className="text-xs text-red-600">לכל נסלק חובה שם מלא, סכום ואמצעי תשלום.</p>}
+                        <button type="button" className="text-sm font-semibold text-brand-700" onClick={() => setDeals((arr) => [...arr, { name: "", amount: "", method: "" }])} data-testid="deal-add">
                           + עוד לקוח
                         </button>
                       </div>
@@ -378,7 +399,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
               )}
               <ErrorText>{error}</ErrorText>
               <div className="mt-3 flex justify-end">
-                <Button onClick={saveStatus} disabled={busy || !statusDirty || (status === "in_progress" && noteRequired && !note.trim())}>
+                <Button onClick={saveStatus} disabled={busy || !statusDirty || (status === "in_progress" && noteRequired && !note.trim()) || (task.kind === "leads" && dealsIncomplete)}>
                   {busy ? "שומר..." : "שמירת עדכון"}
                 </Button>
               </div>

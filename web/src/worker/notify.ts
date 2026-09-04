@@ -9,7 +9,7 @@ import { getSettings } from "./settings";
 import { chunk } from "./validate";
 import { localDate, weekdayOf } from "./dates";
 import { parseDeals } from "./serialize";
-import type { AppSettings, TaskPriority } from "@shared/types";
+import { PAYMENT_METHOD_LABEL, type AppSettings, type TaskPriority } from "@shared/types";
 
 const DEBOUNCE_MS = 3 * 60 * 1000; // wait for a quiet period after the last added task
 const MAX_WAIT_MS = 15 * 60 * 1000; // ...but never hold a digest longer than this
@@ -279,7 +279,7 @@ export async function adminFeed(
     if (t.kind === "leads") {
       const deals = parseDeals(t.dealsJson);
       if (t.metricCalls != null) lines.push(`שיחות: ${t.metricCalls}`);
-      if (deals.length) lines.push(`נסלקים: ${deals.length} — ${deals.map((d) => (d.amount != null ? `${escapeHtml(d.name)} ${d.amount}₪` : escapeHtml(d.name))).join(", ")}`);
+      if (deals.length) lines.push(`נסלקים: ${deals.length} — ${deals.map((d) => `${escapeHtml(d.name)} ${d.amount}₪ (${d.method ? PAYMENT_METHOD_LABEL[d.method] : "לא צוין"})`).join(", ")}`);
     }
     if (input.extra) lines.push(escapeHtml(input.extra));
     lines.push(`🙋 בוצע על ידי: <b>${escapeHtml(input.actor.name)}</b> · ${new Intl.DateTimeFormat("he-IL", { timeZone: env.TIMEZONE, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())}`);

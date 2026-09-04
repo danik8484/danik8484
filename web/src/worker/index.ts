@@ -6,7 +6,7 @@ import { loadTeam, publicTeam, visibleIdsFor } from "./team";
 import { toPublicUser } from "./serialize";
 import { localDate } from "./dates";
 import { authRoutes } from "./routes/auth";
-import { taskRoutes, logRoutes } from "./routes/tasks";
+import { taskRoutes, logRoutes, dealRoutes } from "./routes/tasks";
 import { recurringRoutes } from "./routes/recurring";
 import { userRoutes } from "./routes/users";
 import { photoRoutes } from "./routes/photos";
@@ -81,6 +81,7 @@ app.get("/api/me", (c) => {
 
 app.route("/api/tasks", taskRoutes);
 app.route("/api/log", logRoutes);
+app.route("/api/deals", dealRoutes);
 app.route("/api/recurring", recurringRoutes);
 app.route("/api/users", userRoutes);
 app.route("/api", photoRoutes);

@@ -3,10 +3,38 @@ export type TaskStatus = "open" | "in_progress" | "done";
 export type TaskKind = "normal" | "leads";
 export type TaskPriority = "urgent" | "high" | "normal";
 
-/** A closed deal recorded on a leads task. */
+export const PAYMENT_METHODS = ["credit_card", "bank_transfer", "standing_order", "bank_standing_order", "cash", "crypto", "paypal"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  credit_card: "כרטיס אשראי",
+  bank_transfer: "העברה בנקאית",
+  standing_order: "הוראת קבע",
+  bank_standing_order: "הוראת קבע בנקאית",
+  cash: "מזומן",
+  crypto: "קריפטו",
+  paypal: "פייפאל",
+};
+
+/** A closed deal recorded on a leads task. All three fields are required. */
+// TODO(DND CASH): sync these deals into the DND CASH system.
 export interface Deal {
-  name: string;
-  amount: number | null;
+  name: string; // full customer name
+  amount: number; // ₪
+  method: PaymentMethod | ""; // "" only for legacy rows saved before the method existed
+}
+
+export interface DealRow extends Deal {
+  taskId: number;
+  date: string; // the leads task's date (YYYY-MM-DD)
+  assigneeId: number;
+}
+
+export interface DealsResponse {
+  from: string;
+  to: string;
+  deals: DealRow[];
+  total: number;
+  byMethod: Record<string, { count: number; amount: number }>;
 }
 export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder";
 

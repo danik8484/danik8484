@@ -1,4 +1,4 @@
-import type { AppSettings, Attachment, AuthConfig, BoardResponse, Deal, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskPriority, TaskStatus } from "@shared/types";
+import type { AppSettings, Attachment, AuthConfig, BoardResponse, Deal, DealsResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskPriority, TaskStatus } from "@shared/types";
 
 export type ClientSettings = AppSettings & { telegramConfigured: boolean; whatsappConfigured: boolean };
 
@@ -72,6 +72,7 @@ export const api = {
   pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => request<{ ok: true }>("POST", "/api/push/subscribe", sub),
   pushUnsubscribe: (endpoint: string) => request<{ ok: true }>("POST", "/api/push/unsubscribe", { endpoint }),
   pushTest: () => request<{ ok: true; delivered: number }>("POST", "/api/push/test"),
+  deals: (from: string, to: string, userId?: number) => request<DealsResponse>("GET", `/api/deals?from=${from}&to=${to}${userId ? `&userId=${userId}` : ""}`),
   log: (from: string, to: string) => request<{ from: string; to: string; entries: LogEntry[] }>("GET", `/api/log?from=${from}&to=${to}`),
   recurring: () => request<{ recurring: RecurringTask[] }>("GET", "/api/recurring"),
   updateRecurring: (id: number, input: { title?: string; details?: string; weekdays?: number[]; active?: boolean; kind?: "normal" | "leads" }) =>

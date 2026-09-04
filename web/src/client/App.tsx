@@ -10,6 +10,7 @@ import Recurring from "./pages/Recurring";
 import Log from "./pages/Log";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
+import Deals from "./pages/Deals";
 import { PushToggle } from "./components/PushSettings";
 import { disablePush, resyncPush } from "./push";
 
@@ -71,6 +72,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Board />} />
           <Route path="/recurring" element={<Recurring />} />
+          <Route path="/deals" element={<Deals />} />
           <Route path="/log" element={session.user.role === "employee" ? <Navigate to="/" replace /> : <Log />} />
           <Route path="/users" element={session.user.role === "admin" ? <Users /> : <Navigate to="/" replace />} />
           <Route path="/settings" element={session.user.role === "admin" ? <Settings /> : <Navigate to="/" replace />} />
@@ -101,6 +103,7 @@ function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: (
         const links = [
           { to: "/", label: "לו\"ז" },
           { to: "/recurring", label: "משימות קבועות" },
+          { to: "/deals", label: "נסלקים" },
           ...(session.user.role !== "employee" ? [{ to: "/log", label: "יומן פעילות" }] : []),
           ...(session.user.role === "admin" ? [{ to: "/users", label: "אנשי צוות" }, { to: "/settings", label: "הגדרות" }] : []),
         ];

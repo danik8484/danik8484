@@ -10,7 +10,8 @@ import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
 import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
-import type { BoardResponse, TaskPriority, TaskStatus } from "@shared/types";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type BoardResponse, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
+import { parseDeals } from "../serialize";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "normal"];
 const PRIORITY_NOTE: Record<TaskPriority, string> = { urgent: "חשיבות: 🚨 דחוף", high: "חשיבות: ⬆️ עדיפות גבוהה", normal: "" };
@@ -190,24 +191,24 @@ taskRoutes.post("/:id/status", async (c) => {
     // TODO(DND CASH): push these deals into the DND CASH system once that integration is built.
     if (body.deals !== undefined) {
       if (!Array.isArray(body.deals) || body.deals.length > 50) return c.json({ error: "רשימת נסלקים לא תקינה" }, 400);
-      const deals: { name: string; amount: number | null }[] = [];
+      const deals: { name: string; amount: number; method: PaymentMethod }[] = [];
       for (const d of body.deals as unknown[]) {
         const o = (d ?? {}) as Record<string, unknown>;
         const name = str(o.name, 100);
-        if (!name) return c.json({ error: "חובה למלא שם לקוח לכל נסלק" }, 400);
-        let amount: number | null = null;
-        if (o.amount !== undefined && o.amount !== null && o.amount !== "") {
-          const n = typeof o.amount === "number" ? o.amount : Number(o.amount);
-          if (!Number.isFinite(n) || n < 0 || n > 10_000_000) return c.json({ error: "סכום לא תקין" }, 400);
-          amount = Math.round(n * 100) / 100;
-        }
-        deals.push({ name, amount });
+        if (!name || name.split(/\s+/).length < 2) return c.json({ error: "חובה למלא שם מלא (שם פרטי ומשפחה) לכל נסלק" }, 400);
+        const n = typeof o.amount === "number" ? o.amount : o.amount === "" || o.amount === null || o.amount === undefined ? NaN : Number(o.amount);
+        if (!Number.isFinite(n) || n <= 0 || n > 10_000_000) return c.json({ error: `חובה למלא סכום לנסלק ${name}` }, 400);
+        const method = o.method as PaymentMethod;
+        if (!(PAYMENT_METHODS as readonly string[]).includes(method)) return c.json({ error: `חובה לבחור אמצעי תשלום לנסלק ${name}` }, 400);
+        deals.push({ name, amount: Math.round(n * 100) / 100, method });
       }
       const json = deals.length ? JSON.stringify(deals) : null;
       if (json !== row.dealsJson) {
         patch.dealsJson = json;
         patch.metricDeals = deals.length ? deals.length : null;
-        metricNotes.push(deals.length ? `נסלקים: ${deals.length} (${deals.map((d) => (d.amount != null ? `${d.name} ${d.amount}₪` : d.name)).join(", ")})` : "נסלקים: –");
+        metricNotes.push(
+          deals.length ? `נסלקים: ${deals.length} (${deals.map((d) => `${d.name} ${d.amount}₪ ${PAYMENT_METHOD_LABEL[d.method]}`).join(", ")})` : "נסלקים: –",
+        );
       }
     }
   }
@@ -369,6 +370,39 @@ taskRoutes.delete("/:id", async (c) => {
   await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "deleted", fromStatus: row.status, note: reason }).run();
   c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "deleted", { extra: `סיבה: ${reason}` }));
   return c.json({ ok: true });
+});
+
+/** Closed deals ("נסלקים") across the people I can see, for the separate deals page. */
+export const dealRoutes = new Hono<AppEnv>();
+dealRoutes.get("/", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user");
+  const visible = visibleIdsFor(me, c.get("team"));
+  const today = localDate(c.env.TIMEZONE);
+  const from = isIsoDate(c.req.query("from")) ? (c.req.query("from") as string) : today.slice(0, 8) + "01";
+  const to = isIsoDate(c.req.query("to")) ? (c.req.query("to") as string) : today;
+  const who = int(c.req.query("userId") ?? "");
+  const ids = who !== null ? visible.filter((id) => id === who) : visible;
+  const rows = ids.length
+    ? await db
+        .select({ id: tasks.id, dueDate: tasks.dueDate, assigneeId: tasks.assigneeId, dealsJson: tasks.dealsJson })
+        .from(tasks)
+        .where(and(isNull(tasks.deletedAt), inArray(tasks.assigneeId, ids), eq(tasks.kind, "leads"), gte(tasks.dueDate, from), lte(tasks.dueDate, to)))
+        .orderBy(desc(tasks.dueDate), desc(tasks.id))
+        .all()
+    : [];
+  const deals: DealsResponse["deals"] = [];
+  const byMethod: DealsResponse["byMethod"] = {};
+  let total = 0;
+  for (const r of rows) {
+    for (const d of parseDeals(r.dealsJson)) {
+      deals.push({ ...d, taskId: r.id, date: r.dueDate, assigneeId: r.assigneeId });
+      total += d.amount;
+      const k = d.method || "unknown";
+      byMethod[k] = { count: (byMethod[k]?.count ?? 0) + 1, amount: (byMethod[k]?.amount ?? 0) + d.amount };
+    }
+  }
+  return c.json<DealsResponse>({ from, to, deals, total: Math.round(total * 100) / 100, byMethod });
 });
 
 /** Activity log across visible users. */
