@@ -96,6 +96,19 @@ test.describe.serial("teammates can request tasks from each other", () => {
     const uri = await login(browser, "uri.h@example.com");
     const row = uri.getByTestId("sent").locator("li", { hasText: T.uriToDani });
     await expect(row.locator("[aria-label='הושלם']")).toBeVisible();
+
+    // Dani's instruction: employee cannot mark done
+    await uri.getByTestId("group-management-5").getByText(T.daniToUri).click();
+    await expect(uri.getByRole("dialog").getByRole("radio", { name: "הושלם" })).toBeDisabled();
+    await uri.getByRole("button", { name: "סגירה" }).click();
+
+    // A recurring daily task from Dani: employee marks done, no note needed
+    const daily = uri.getByTestId("card-5").getByText(/ניקיון חדר כושר/).first();
+    await daily.click();
+    await expect(uri.getByRole("dialog").getByRole("radio", { name: "הושלם" })).toBeEnabled();
+    await uri.getByRole("radio", { name: "הושלם" }).click();
+    await uri.getByRole("button", { name: "שמירת עדכון" }).click();
+    await expect(uri.getByRole("dialog").getByText("פתוח ← הושלם")).toBeVisible();
     await uri.context().close();
   });
 });

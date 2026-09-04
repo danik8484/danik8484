@@ -6,7 +6,7 @@ import { toTask, toEvent, toPublicUser } from "../serialize";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
-import { canAssignTask, canEditOrDelete, canManage, canOpenTask } from "@shared/permissions";
+import { canAssignTask, canEditOrDelete, canManage, canMarkDone, canOpenTask, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import type { BoardResponse, TaskStatus } from "@shared/types";
 
@@ -133,8 +133,14 @@ taskRoutes.post("/:id/status", async (c) => {
   if (note === null) return c.json({ error: "הפירוט ארוך מדי" }, 400);
   const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
   if (!row) return c.json({ error: "לא נמצא" }, 404);
-  if (!canManage(toPublicUser(me, false), row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
-  if (status === "in_progress" && !note) return c.json({ error: "כשמסמנים 'בתהליך' חובה לפרט מה בוצע ומה נשאר" }, 400);
+  const mePublic = toPublicUser(me, false);
+  if (!canManage(mePublic, row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  if (status === "done" && !canMarkDone(mePublic, row, c.get("teamPublic"))) {
+    return c.json({ error: "רק המנהל יכול לסמן 'הושלם' על משימה שניתנה על ידי מישהו אחר. סמן 'בתהליך' וכתוב מה בוצע." }, 403);
+  }
+  if (status === "in_progress" && !note && noteRequiredForInProgress(row)) {
+    return c.json({ error: "כשמסמנים 'בתהליך' חובה לפרט מה בוצע ומה נשאר" }, 400);
+  }
 
   const now = nowIso();
   const today = localDate(c.env.TIMEZONE);

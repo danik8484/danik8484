@@ -56,3 +56,23 @@ export function taskTier(task: Pick<Task, "assigneeId" | "createdById">, all: Pu
 export function canOpenTask(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById">, all: PublicUser[]): boolean {
   return canView(viewer, task.assigneeId, all) || task.createdById === viewer.id;
 }
+
+/**
+ * Who may mark a task as done:
+ * - recurring (daily) tasks: anyone who manages the assignee's card, including the assignee
+ * - a task the assignee added for themselves: the assignee (and their managers)
+ * - a task given by a manager or by another teammate: only the admin or the assignee's direct manager
+ */
+export function canMarkDone(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById" | "recurringId">, all: PublicUser[]): boolean {
+  if (!canManage(viewer, task.assigneeId, all)) return false;
+  if (viewer.role === "admin") return true;
+  if (task.recurringId) return true;
+  if (task.createdById === task.assigneeId) return true;
+  const assignee = all.find((u) => u.id === task.assigneeId);
+  return !!assignee && assignee.managerId === viewer.id;
+}
+
+/** A progress note is required when marking "in progress", except for recurring (daily) tasks. */
+export function noteRequiredForInProgress(task: Pick<Task, "recurringId">): boolean {
+  return !task.recurringId;
+}

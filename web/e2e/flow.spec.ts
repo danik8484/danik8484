@@ -124,11 +124,12 @@ test.describe.serial("daily schedule flow", () => {
     await page.getByRole("button", { name: "הוספה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.uriSSelf)).toBeVisible();
 
-    // Complete the manager's task
+    // The manager's task: an employee cannot mark it done, only report progress
     await page.getByTestId("card-3").getByText(T.daniForUriS).click();
-    await page.getByRole("radio", { name: "הושלם" }).click();
+    await expect(page.getByRole("dialog").getByRole("radio", { name: "הושלם" })).toBeDisabled();
+    await page.getByLabel(/מה בוצע ומה נשאר/).fill("סיימתי הכל");
     await page.getByRole("button", { name: "שמירת עדכון" }).click();
-    await expect(page.getByRole("dialog").getByText("בתהליך ← הושלם")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("עדכון פירוט")).toBeVisible();
     await page.getByRole("button", { name: "סגירה" }).click();
 
     // Delete own task – reason required
@@ -139,11 +140,22 @@ test.describe.serial("daily schedule flow", () => {
     await page.getByRole("dialog").getByRole("button", { name: "מחיקה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.uriSSelf)).toHaveCount(0);
 
-    // API: employee cannot read the log or users
+    // API: employee cannot read the log or users, and cannot mark the manager's task done
     await apiLogin(request, EMAILS.uriS);
     expect((await request.get("/api/log")).status()).toBe(403);
     expect((await request.get("/api/users")).status()).toBe(403);
+    const board = await (await request.get("/api/tasks/board")).json();
+    const managerTask = board.tasks.find((t: { title: string }) => t.title === T.daniForUriS);
+    expect((await request.post(`/api/tasks/${managerTask.id}/status`, { data: { status: "done", note: "" } })).status()).toBe(403);
     await page.context().close();
+
+    // Ron, as Uri Shapira's manager, closes it
+    const ron = await login(browser, EMAILS.ron);
+    await ron.getByTestId("card-3").getByText(T.daniForUriS).click();
+    await ron.getByRole("radio", { name: "הושלם" }).click();
+    await ron.getByRole("button", { name: "שמירת עדכון" }).click();
+    await expect(ron.getByRole("dialog").getByText("בתהליך ← הושלם")).toBeVisible();
+    await ron.context().close();
   });
 
   test("admin reviews the day and the activity log", async ({ browser }) => {

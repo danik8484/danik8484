@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Task, TaskEvent, TaskStatus } from "@shared/types";
-import { canEditOrDelete, taskTier } from "@shared/permissions";
+import { canEditOrDelete, canMarkDone, noteRequiredForInProgress, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
@@ -44,6 +44,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
 
   const editable = task ? canEditOrDelete(s.user, task, s.users) : false;
   const canChangeStatus = task ? s.canSee(task.assigneeId) : false;
+  const canDone = task ? canMarkDone(s.user, task, s.users) : false;
+  const noteRequired = task ? noteRequiredForInProgress(task) : true;
   const tier = task ? taskTier(task, s.users) : 1;
   const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") : false;
 
@@ -186,8 +188,10 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                     type="button"
                     role="radio"
                     aria-checked={status === st}
+                    disabled={st === "done" && !canDone}
+                    title={st === "done" && !canDone ? "רק המנהל מסמן הושלם" : undefined}
                     onClick={() => setStatus(st)}
-                    className={`rounded-lg border px-2 py-2 text-sm font-semibold ${
+                    className={`rounded-lg border px-2 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${
                       status === st
                         ? st === "done"
                           ? "border-brand-600 bg-brand-600 text-white"
@@ -201,9 +205,12 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                   </button>
                 ))}
               </div>
+              {!canDone && task.status !== "done" && (
+                <p className="mt-2 text-xs text-slate-500">"הושלם" על משימה שניתנה על ידי {s.nameOf(task.createdById)} מסמן רק המנהל. כשסיימת, סמן "בתהליך" וכתוב שבוצע.</p>
+              )}
               <label className="mt-3 block">
                 <span className="mb-1 block text-sm font-semibold text-ink-700">
-                  {status === "in_progress" ? "מה בוצע ומה נשאר? (חובה)" : status === "done" ? "הערת סיום (לא חובה)" : "הערה (לא חובה)"}
+                  {status === "in_progress" ? (noteRequired ? "מה בוצע ומה נשאר? (חובה)" : "מה בוצע ומה נשאר? (לא חובה)") : status === "done" ? "הערת סיום (לא חובה)" : "הערה (לא חובה)"}
                 </span>
                 <textarea
                   className={inputCls}
@@ -215,7 +222,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
               </label>
               <ErrorText>{error}</ErrorText>
               <div className="mt-3 flex justify-end">
-                <Button onClick={saveStatus} disabled={busy || !statusDirty || (status === "in_progress" && !note.trim())}>
+                <Button onClick={saveStatus} disabled={busy || !statusDirty || (status === "in_progress" && noteRequired && !note.trim())}>
                   {busy ? "שומר..." : "שמירת עדכון"}
                 </Button>
               </div>
