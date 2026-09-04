@@ -316,23 +316,27 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                       <div className="mt-2 space-y-2">
                         {deals.map((d, i) => (
                           <div key={i} className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
                             <input
-                              className={`${inputCls} flex-1`}
+                              className={inputCls}
                               placeholder="שם לקוח"
                               value={d.name}
                               onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
                               data-testid={`deal-name-${i}`}
                             />
+                            </div>
+                            <div className="w-28 shrink-0">
                             <input
                               type="number"
                               inputMode="decimal"
                               min={0}
-                              className={`${inputCls} w-28`}
+                              className={inputCls}
                               placeholder="סכום ₪"
                               value={d.amount ?? ""}
                               onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, amount: e.target.value === "" ? null : Number(e.target.value) } : x)))}
                               data-testid={`deal-amount-${i}`}
                             />
+                            </div>
                             <button
                               type="button"
                               className="grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
