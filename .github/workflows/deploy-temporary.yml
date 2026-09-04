@@ -31,6 +31,8 @@ jobs:
           TOKEN=$(openssl rand -hex 32)
           echo "::add-mask::$TOKEN"
           HASH=$(printf 'link:%s' "$TOKEN" | sha256sum | cut -d' ' -f1)
+          # Temporary accounts allow no cron triggers; the board still creates recurring tasks on load.
+          sed -i '/"triggers"/d' wrangler.jsonc
           npx wrangler deploy --temporary --var "BOOTSTRAP_ADMIN_LINK_HASH:$HASH" > deploy.out 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' deploy.out; exit 1; }
           APP_URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.out | head -1)
           CLAIM_URL=$(grep -oE 'https://[^ ]*claim[^ ]*' deploy.out | head -1)
