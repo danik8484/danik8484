@@ -54,42 +54,70 @@ export async function findUserByEmail(db: Db, env: Env, email: string) {
 
 export type RequestCodeResult = { ok: true; devCode?: string } | { ok: false; error: string; status: number };
 
-/** Create a fresh code for an identifier ("email" or "user:<id>"), enforcing the hourly limit. */
-export async function issueCode(db: Db, key: string): Promise<{ ok: true; code: string } | { ok: false; error: string; status: number }> {
+const IP_CODES_PER_10MIN = 15;
+const PER_KEY_COOLDOWN_MS = 45 * 1000;
+
+/**
+ * Create a fresh code for an identifier ("email" or "user:<id>"), enforcing:
+ * an hourly cap per identifier, a short cooldown per identifier, and a cap per client IP
+ * (so an anonymous caller cannot lock a teammate out or spam their phone).
+ */
+export async function issueCode(db: Db, key: string, ip: string | null, cooldownMs = PER_KEY_COOLDOWN_MS): Promise<{ ok: true; code: string } | { ok: false; error: string; status: number }> {
   const now = Date.now();
+  if (ip) {
+    const ipKey = `ip:${ip}`;
+    const byIp = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(loginCodes)
+      .where(and(eq(loginCodes.email, ipKey), gt(loginCodes.createdAt, now - 10 * 60 * 1000)))
+      .get();
+    if ((byIp?.n ?? 0) >= IP_CODES_PER_10MIN) return { ok: false, error: "יותר מדי בקשות. נסה שוב בעוד כמה דקות.", status: 429 };
+    await db.insert(loginCodes).values({ email: ipKey, codeHash: "-", expiresAt: now, used: 1, createdAt: now }).run();
+  }
   const recent = await db
-    .select({ n: sql<number>`count(*)` })
+    .select({ n: sql<number>`count(*)`, last: sql<number>`max(${loginCodes.createdAt})` })
     .from(loginCodes)
     .where(and(eq(loginCodes.email, key), gt(loginCodes.createdAt, now - 60 * 60 * 1000)))
     .get();
   if ((recent?.n ?? 0) >= MAX_CODES_PER_HOUR) return { ok: false, error: "יותר מדי בקשות. נסה שוב בעוד שעה.", status: 429 };
+  if (cooldownMs > 0 && recent?.last && now - Number(recent.last) < cooldownMs) return { ok: false, error: "נשלח קוד לפני רגע. חכה כמה שניות ונסה שוב.", status: 429 };
   const code = randomCode();
   await db.insert(loginCodes).values({ email: key, codeHash: await sha256(key + ":" + code), expiresAt: now + CODE_TTL_MS, createdAt: now }).run();
   return { ok: true, code };
 }
 
-/** Check a code for an identifier: atomic attempt cap, single use. */
+/**
+ * Check a code for an identifier: atomic attempt cap, single use. The three most recent live codes
+ * are accepted, so a code someone else requested afterwards cannot invalidate the real one.
+ */
 export async function checkCode(db: Db, key: string, code: string): Promise<boolean> {
   const now = Date.now();
-  const row = await db
+  const rows = await db
     .select()
     .from(loginCodes)
     .where(and(eq(loginCodes.email, key), eq(loginCodes.used, 0), gt(loginCodes.expiresAt, now)))
     .orderBy(desc(loginCodes.createdAt))
-    .get();
-  if (!row) return false;
-  const bumped = await db
-    .update(loginCodes)
-    .set({ attempts: sql`${loginCodes.attempts} + 1` })
-    .where(and(eq(loginCodes.id, row.id), lt(loginCodes.attempts, MAX_ATTEMPTS)))
-    .returning({ id: loginCodes.id })
-    .get();
-  if (!bumped) return false;
-  if ((await sha256(key + ":" + code.trim())) !== row.codeHash) return false;
-  const consumed = await db.update(loginCodes).set({ used: 1 }).where(and(eq(loginCodes.id, row.id), eq(loginCodes.used, 0))).returning({ id: loginCodes.id }).get();
-  if (!consumed) return false;
-  await db.delete(loginCodes).where(lt(loginCodes.expiresAt, now - 24 * 60 * 60 * 1000)).run();
-  return true;
+    .limit(3)
+    .all();
+  if (rows.length === 0) return false;
+  const hash = await sha256(key + ":" + code.trim());
+  for (const row of rows) {
+    const bumped = await db
+      .update(loginCodes)
+      .set({ attempts: sql`${loginCodes.attempts} + 1` })
+      .where(and(eq(loginCodes.id, row.id), lt(loginCodes.attempts, MAX_ATTEMPTS)))
+      .returning({ id: loginCodes.id })
+      .get();
+    if (!bumped) continue;
+    if (hash !== row.codeHash) continue;
+    const consumed = await db.update(loginCodes).set({ used: 1 }).where(and(eq(loginCodes.id, row.id), eq(loginCodes.used, 0))).returning({ id: loginCodes.id }).get();
+    if (!consumed) return false;
+    // The sibling codes are no longer needed
+    await db.update(loginCodes).set({ used: 1 }).where(and(eq(loginCodes.email, key), eq(loginCodes.used, 0))).run();
+    await db.delete(loginCodes).where(lt(loginCodes.expiresAt, now - 24 * 60 * 60 * 1000)).run();
+    return true;
+  }
+  return false;
 }
 
 export async function requestCode(db: Db, env: Env, email: string): Promise<RequestCodeResult> {

@@ -69,7 +69,7 @@ export async function pushToUser(env: Env, db: Db, userId: number, content: Push
       const payload = await buildPushPayload(
         { data: { title: content.title, body: content.body, url: content.url ?? "/", tag: content.tag ?? "general" }, options: { ttl: 6 * 60 * 60, urgency: "normal" } },
         subscription,
-        { subject: env.VAPID_SUBJECT || "mailto:admin@example.com", publicKey: vapid.publicKey, privateKey: vapid.privateKey },
+        { subject: env.VAPID_SUBJECT || env.APP_URL || "mailto:admin@example.com", publicKey: vapid.publicKey, privateKey: vapid.privateKey },
       );
       const res = await fetch(sub.endpoint, payload);
       if (res.ok || res.status === 201) {

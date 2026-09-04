@@ -41,7 +41,7 @@ async function runScheduledIfDue(env: Env): Promise<void> {
   const claimed = await db
     .insert(appMeta)
     .values({ key: "last_background_run", value: String(now) })
-    .onConflictDoUpdate({ target: appMeta.key, set: { value: sql`excluded.value` }, where: sql`CAST(${appMeta.value} AS INTEGER) < ${now - 5 * 60 * 1000}` })
+    .onConflictDoUpdate({ target: appMeta.key, set: { value: sql`excluded.value` }, setWhere: sql`CAST(${appMeta.value} AS INTEGER) < ${now - 5 * 60 * 1000}` })
     .returning({ value: appMeta.value })
     .get();
   if (!claimed) return;
@@ -105,6 +105,8 @@ export default {
   fetch: app.fetch,
   /** Every 5 minutes: today's recurring tasks, batched "new task" notifications, end-of-day reminders. */
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runScheduled(env, event.cron === "force" && env.APP_ENV === "development"));
+    const force = event.cron === "force" && env.APP_ENV === "development";
+    // Production cron goes through the same 5-minute claim as request-triggered runs, so the two never overlap.
+    ctx.waitUntil(force || env.APP_ENV === "development" ? runScheduled(env, force) : runScheduledIfDue(env));
   },
 };

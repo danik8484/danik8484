@@ -225,7 +225,19 @@ export default function Board() {
         )}
       </Modal>
 
-      <TaskSheet taskId={openTask} viewDate={date} onClose={() => setOpenTask(null)} onChanged={load} />
+      <TaskSheet
+        taskId={openTask}
+        viewDate={date}
+        onClose={() => {
+          setOpenTask(null);
+          if (params.has("task")) {
+            const next = new URLSearchParams(params);
+            next.delete("task");
+            setParams(next, { replace: true });
+          }
+        }}
+        onChanged={load}
+      />
     </div>
   );
 }

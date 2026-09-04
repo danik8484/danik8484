@@ -86,6 +86,7 @@ photoRoutes.post("/photos/:id/thumb", async (c) => {
   if (id === null) return c.json({ error: "לא נמצא" }, 404);
   const row = await db.select().from(taskAttachments).where(and(eq(taskAttachments.id, id), isNull(taskAttachments.deletedAt))).get();
   if (!row || row.uploadedById !== me.id) return c.json({ error: "לא נמצא" }, 404);
+  if (Number(c.req.header("content-length") || 0) > 150_000) return c.json({ error: "תצוגה מקדימה גדולה מדי" }, 413);
   const bytes = await c.req.arrayBuffer();
   if (bytes.byteLength === 0 || bytes.byteLength > 150_000) return c.json({ error: "תצוגה מקדימה גדולה מדי" }, 413);
   const thumbKey = `${row.kvKey}/thumb`;
@@ -109,7 +110,8 @@ photoRoutes.get("/photos/:id", async (c) => {
   return new Response(body, {
     headers: {
       "content-type": wantThumb ? "image/jpeg" : row.contentType,
-      "cache-control": "private, max-age=86400",
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
       "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(row.fileName)}`,
     },
   });

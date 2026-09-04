@@ -15,8 +15,6 @@ const DEBOUNCE_MS = 3 * 60 * 1000; // wait for a quiet period after the last add
 const MAX_WAIT_MS = 15 * 60 * 1000; // ...but never hold a digest longer than this
 const TASK_REMINDER_EVERY_MS = 30 * 60 * 1000;
 
-export const PRIORITY_LABEL: Record<TaskPriority, string> = { urgent: "🚨 דחוף", high: "⬆️ עדיפות גבוהה", normal: "רגיל" };
-
 function priorityPrefix(p: TaskPriority): string {
   return p === "urgent" ? "🚨 דחוף: " : p === "high" ? "⬆️ " : "";
 }
@@ -63,9 +61,9 @@ export function describeTask(t: TaskRow, team: { id: number; name: string }[]): 
 }
 
 /** Managers can bypass the digest: one message right now with the full task. */
-export async function notifyTaskNow(env: Env, db: Db, task: TaskRow, appUrl: string): Promise<void> {
+export async function notifyTaskNow(env: Env, db: Db, task: TaskRow, appUrl: string): Promise<"push" | "whatsapp" | "both" | "none"> {
   const team = await db.select({ id: users.id, name: users.name }).from(users).all();
-  await notifyUser(env, db, task.assigneeId, {
+  return notifyUser(env, db, task.assigneeId, {
     title: task.priority === "urgent" ? "🚨 משימה דחופה חדשה" : "משימה חדשה",
     body: describeTask(task, team),
     url: appUrl + "/",
@@ -90,6 +88,13 @@ export async function flushDigests(env: Env, db: Db, appUrl: string, now = Date.
     const oldest = Math.min(...items.map((i) => i.createdAt));
     if (!force && now - newest < DEBOUNCE_MS && now - oldest < MAX_WAIT_MS) continue;
 
+    // Claim the rows first so an overlapping run cannot send the same digest twice.
+    let claimedCount = 0;
+    for (const ids of chunk(items.map((i) => i.id))) {
+      const r = await db.update(notificationQueue).set({ sentAt: now }).where(and(inArray(notificationQueue.id, ids), isNull(notificationQueue.sentAt))).returning({ id: notificationQueue.id }).all();
+      claimedCount += r.length;
+    }
+    if (claimedCount === 0) continue;
     const taskIds = [...new Set(items.map((i) => i.taskId))];
     const rows: { id: number; title: string; priority: TaskPriority }[] = [];
     for (const ids of chunk(taskIds)) {
@@ -115,9 +120,6 @@ export async function flushDigests(env: Env, db: Db, appUrl: string, now = Date.
         settings,
       );
       sent++;
-    }
-    for (const ids of chunk(items.map((i) => i.id))) {
-      await db.update(notificationQueue).set({ sentAt: now }).where(inArray(notificationQueue.id, ids)).run();
     }
   }
   return sent;
@@ -152,7 +154,13 @@ export async function sendDayEndReminders(env: Env, db: Db, appUrl: string, now 
     .all();
   let sent = 0;
   for (const u of candidates) {
-    await db.update(users).set({ reminderSentDate: today }).where(eq(users.id, u.id)).run();
+    const claimed = await db
+      .update(users)
+      .set({ reminderSentDate: today })
+      .where(and(eq(users.id, u.id), or(isNull(users.reminderSentDate), ne(users.reminderSentDate, today))))
+      .returning({ id: users.id })
+      .get();
+    if (!claimed) continue;
     const reachable = (await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, u.id)).all()).length > 0 || (!!u.phone && whatsappConfigured(settings));
     if (!reachable) continue;
 
@@ -220,7 +228,14 @@ export async function sendTaskReminders(env: Env, db: Db, appUrl: string, now = 
   const team = await db.select({ id: users.id, name: users.name, active: users.active }).from(users).all();
   let sent = 0;
   for (const t of due) {
-    await db.update(tasks).set({ reminderLastSentAt: nowIsoStr }).where(eq(tasks.id, t.id)).run();
+    // Atomic claim: two overlapping runs cannot both send the same reminder.
+    const claimed = await db
+      .update(tasks)
+      .set({ reminderLastSentAt: nowIsoStr })
+      .where(and(eq(tasks.id, t.id), or(isNull(tasks.reminderLastSentAt), lte(tasks.reminderLastSentAt, resendBefore))))
+      .returning({ id: tasks.id })
+      .get();
+    if (!claimed) continue;
     if (team.find((u) => u.id === t.assigneeId)?.active !== 1) continue;
     await notifyUser(
       env,
@@ -254,6 +269,8 @@ const KIND_LABEL: Record<AdminEventKind, string> = {
 
 const STATUS_HE: Record<string, string> = { open: "פתוח", in_progress: "בתהליך", done: "הושלם ✅" };
 
+const clip = (t: string, n = 500) => (t.length > n ? t.slice(0, n) + "…" : t);
+
 /** Compose and send the Telegram message. Never throws (errors are logged). */
 export async function adminFeed(
   env: Env,
@@ -269,19 +286,19 @@ export async function adminFeed(
     const t = input.task;
     const lines: string[] = [];
     lines.push(`<b>${KIND_LABEL[input.kind]}</b>`);
-    lines.push(`<b>${escapeHtml(priorityPrefix(t.priority) + t.title)}</b>${t.recurringId ? " (קבועה)" : ""}${t.kind === "leads" ? " · לידים" : ""}`);
-    if (t.details) lines.push(escapeHtml(t.details));
+    lines.push(`<b>${escapeHtml(clip(priorityPrefix(t.priority) + t.title, 200))}</b>${t.recurringId ? " (קבועה)" : ""}${t.kind === "leads" ? " · לידים" : ""}`);
+    if (t.details) lines.push(escapeHtml(clip(t.details)));
     lines.push(`👤 של: ${escapeHtml(name(t.assigneeId))} · מאת: ${escapeHtml(name(t.createdById))} · ליום ${t.dueDate.slice(8, 10)}.${t.dueDate.slice(5, 7)}`);
     if (input.kind === "status" && input.fromStatus && input.toStatus) lines.push(`סטטוס: ${STATUS_HE[input.fromStatus] ?? input.fromStatus} ← ${STATUS_HE[input.toStatus] ?? input.toStatus}`);
     else lines.push(`סטטוס: ${STATUS_HE[t.status] ?? t.status}`);
-    if (t.progressNote && (t.status === "in_progress" || input.kind === "note")) lines.push(`מה בוצע ומה נשאר: ${escapeHtml(t.progressNote)}`);
-    if (input.note && input.note !== t.progressNote) lines.push(escapeHtml(input.note));
+    if (t.progressNote && (t.status === "in_progress" || input.kind === "note")) lines.push(`מה בוצע ומה נשאר: ${escapeHtml(clip(t.progressNote))}`);
+    if (input.note && input.note !== t.progressNote) lines.push(escapeHtml(clip(input.note)));
     if (t.kind === "leads") {
       const deals = parseDeals(t.dealsJson);
       if (t.metricCalls != null) lines.push(`שיחות: ${t.metricCalls}`);
       if (deals.length) lines.push(`נסלקים: ${deals.length} — ${deals.map((d) => `${escapeHtml(d.name)} ${d.amount}₪ (${d.method ? PAYMENT_METHOD_LABEL[d.method] : "לא צוין"})`).join(", ")}`);
     }
-    if (input.extra) lines.push(escapeHtml(input.extra));
+    if (input.extra) lines.push(escapeHtml(clip(input.extra)));
     lines.push(`🙋 בוצע על ידי: <b>${escapeHtml(input.actor.name)}</b> · ${new Intl.DateTimeFormat("he-IL", { timeZone: env.TIMEZONE, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())}`);
     if (env.APP_URL) lines.push(`<a href="${env.APP_URL}/?task=${t.id}">פתיחה במערכת</a>`);
     await sendTelegram(s, lines.join("\n"));
@@ -292,8 +309,25 @@ export async function adminFeed(
 
 /** Convenience: load the task row and the actor, then feed. */
 export async function adminFeedFor(env: Env, db: Db, taskId: number, actor: UserRow, kind: AdminEventKind, opts: { note?: string; fromStatus?: string; toStatus?: string; extra?: string } = {}) {
-  const t = await db.select().from(tasks).where(eq(tasks.id, taskId)).get();
-  if (!t) return;
-  await adminFeed(env, db, { kind, task: t, actor, ...opts });
+  try {
+    const t = await db.select().from(tasks).where(eq(tasks.id, taskId)).get();
+    if (!t) return;
+    await adminFeed(env, db, { kind, task: t, actor, ...opts });
+  } catch (e) {
+    console.error("admin feed failed", e);
+  }
 }
 
+
+/** Free-form admin feed line (recurring templates and other non-task events). Never throws. */
+export async function adminFeedText(env: Env, db: Db, actor: UserRow, title: string, lines: string[]): Promise<void> {
+  try {
+    const s = await getSettings(db, env);
+    if (!telegramConfigured(s)) return;
+    if (actor.role === "admin" && !s.telegramNotifyOwnActions) return;
+    const when = new Intl.DateTimeFormat("he-IL", { timeZone: env.TIMEZONE, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date());
+    await sendTelegram(s, [`<b>${escapeHtml(clip(title, 200))}</b>`, ...lines.map((l) => escapeHtml(clip(l))), `🙋 בוצע על ידי: <b>${escapeHtml(actor.name)}</b> · ${when}`].join("\n"));
+  } catch (e) {
+    console.error("admin feed failed", e);
+  }
+}

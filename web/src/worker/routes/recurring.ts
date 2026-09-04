@@ -8,6 +8,8 @@ import { canEditOrDelete, canManage } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import { localDate, nowIso } from "../dates";
 import { materializeRecurring } from "../recurring";
+import { adminFeedText } from "../notify";
+import { fmtWeekdaysHe } from "../dates";
 
 export const recurringRoutes = new Hono<AppEnv>();
 
@@ -59,6 +61,12 @@ recurringRoutes.patch("/:id", async (c) => {
   const updated = await db.select().from(recurringTasks).where(eq(recurringTasks.id, id)).get();
   // If today became a scheduled day (or the task was re-activated), create today's instance right away
   if (patch.weekdays !== undefined || patch.active === 1) await materializeRecurring(db, localDate(c.env.TIMEZONE), true);
+  const assignee = c.get("team").find((u) => u.id === row.assigneeId)?.name ?? "";
+  c.executionCtx.waitUntil(
+    adminFeedText(c.env, db, me, patch.active === 0 ? "⏸️ משימה קבועה הושהתה" : patch.active === 1 ? "▶️ משימה קבועה הופעלה" : "✏️ משימה קבועה נערכה", [
+      `${updated!.title} · של ${assignee} · ${fmtWeekdaysHe(updated!.weekdays)}`,
+    ]),
+  );
   return c.json({ ok: true, recurring: toRecurring(updated!) });
 });
 
@@ -81,5 +89,7 @@ recurringRoutes.delete("/:id", async (c) => {
     .set({ active: 0, deletedAt: nowIso(), deletedById: me.id, deleteReason: reason })
     .where(eq(recurringTasks.id, id))
     .run();
+  const assignee = c.get("team").find((u) => u.id === row.assigneeId)?.name ?? "";
+  c.executionCtx.waitUntil(adminFeedText(c.env, db, me, "🗑️ משימה קבועה נמחקה", [`${row.title} · של ${assignee}`, `סיבה: ${reason}`]));
   return c.json({ ok: true });
 });

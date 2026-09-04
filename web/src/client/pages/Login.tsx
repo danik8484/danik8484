@@ -99,7 +99,10 @@ export default function Login({ onLoggedIn, initialError = "" }: { onLoggedIn: (
                   {config.team.length === 0 && <li className="text-sm text-slate-500">אין אנשי צוות פעילים</li>}
                 </ul>
                 <ErrorText>{error}</ErrorText>
-                <Button className="w-full" disabled={!picked || busy} onClick={() => sendCode()}>
+                {!config.whatsapp && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">שליחת קודים לוואטסאפ עדיין לא הופעלה. בקש מהמנהל קישור כניסה{config.email ? ", או היכנס עם קוד למייל" : ""}.</p>
+                )}
+                <Button className="w-full" disabled={!picked || busy || !config.whatsapp} onClick={() => sendCode()}>
                   {busy ? "שולח..." : "שלח לי קוד לוואטסאפ"}
                 </Button>
                 {config.email && (

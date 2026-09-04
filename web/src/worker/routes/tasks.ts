@@ -4,7 +4,8 @@ import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
 import { listAttachments, photoCounts } from "./photos";
-import { adminFeedFor, notifyTaskNow, queueTaskNotification } from "../notify";
+import { adminFeedFor, adminFeedText, notifyTaskNow, queueTaskNotification } from "../notify";
+import { fmtWeekdaysHe } from "../dates";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
@@ -116,6 +117,8 @@ taskRoutes.post("/", async (c) => {
     if (dueDate <= today && wds.includes(weekdayOf(today))) {
       await materializeRecurring(db, today, true);
     }
+    const assignee = teamPublic.find((u) => u.id === assigneeId)?.name ?? "";
+    c.executionCtx.waitUntil(adminFeedText(c.env, db, me, "🔁 משימה קבועה חדשה", [`${title} · של ${assignee} · ${fmtWeekdaysHe(wds.join(","))}${kind === "leads" ? " · לידים" : ""}`, details].filter(Boolean)));
     return c.json({ ok: true, recurringId: rec.id }, 201);
   }
 
@@ -127,8 +130,17 @@ taskRoutes.post("/", async (c) => {
   await db.insert(taskEvents).values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open", note: priority !== "normal" ? PRIORITY_NOTE[priority] : "" }).run();
   // Managers may send the full task right now instead of waiting for the batched digest.
   const notifyNow = body.notifyNow === true && me.role !== "employee" && assigneeId !== me.id;
-  if (notifyNow) c.executionCtx.waitUntil(notifyTaskNow(c.env, db, row, new URL(c.req.url).origin));
-  else await queueTaskNotification(db, assigneeId, me.id, row.id);
+  if (notifyNow) {
+    // Send right away; if the person has no device and no WhatsApp, fall back to the batched digest so nothing is lost.
+    c.executionCtx.waitUntil(
+      notifyTaskNow(c.env, db, row, new URL(c.req.url).origin)
+        .then((result) => (result === "none" ? queueTaskNotification(db, assigneeId, me.id, row.id) : undefined))
+        .catch((e) => {
+          console.error("immediate notice failed", e);
+          return queueTaskNotification(db, assigneeId, me.id, row.id);
+        }),
+    );
+  } else await queueTaskNotification(db, assigneeId, me.id, row.id);
   c.executionCtx.waitUntil(adminFeedFor(c.env, db, row.id, me, "created", { extra: notifyNow ? "נשלחה הודעה מיידית" : undefined }));
   return c.json({ ok: true, task: toTask(row) }, 201);
 });
@@ -263,6 +275,7 @@ taskRoutes.post("/:id/reminder", async (c) => {
     const d = new Date(String(body.reminderAt));
     if (Number.isNaN(d.getTime())) return c.json({ error: "תאריך ושעה לא תקינים" }, 400);
     if (d.getTime() < Date.now() - 5 * 60 * 1000) return c.json({ error: "התזכורת חייבת להיות בעתיד" }, 400);
+    if (d.getTime() > Date.now() + 366 * 24 * 60 * 60 * 1000) return c.json({ error: "תזכורת אפשר לקבוע עד שנה קדימה" }, 400);
     reminderAt = d.toISOString();
   }
   await db.update(tasks).set({ reminderAt, reminderLastSentAt: null, reminderById: reminderAt ? me.id : null, updatedAt: nowIso() }).where(eq(tasks.id, id)).run();
@@ -324,6 +337,7 @@ taskRoutes.patch("/:id", async (c) => {
     }
   }
   let reassignedTo: number | null = null;
+  let reassignNote = "";
   if (body.assigneeId !== undefined) {
     const assigneeId = int(body.assigneeId);
     if (assigneeId === null) return c.json({ error: "איש צוות לא תקין" }, 400);
@@ -333,6 +347,12 @@ taskRoutes.patch("/:id", async (c) => {
       if (row.recurringId) return c.json({ error: "משימה קבועה אי אפשר להעביר לאיש צוות אחר" }, 400);
       patch.assigneeId = assigneeId;
       reassignedTo = assigneeId;
+      // A reminder follows the task only when the editor manages the new assignee's card.
+      if (row.reminderAt && !canManage(mePublic, assigneeId, teamPublic)) {
+        patch.reminderAt = null;
+        patch.reminderLastSentAt = null;
+        patch.reminderById = null;
+      }
     }
   }
   if (changes.length === 0 && reassignedTo === null) return c.json({ ok: true, task: toTask(row) });
@@ -344,11 +364,12 @@ taskRoutes.patch("/:id", async (c) => {
   if (reassignedTo !== null) {
     const from = c.get("team").find((u) => u.id === row.assigneeId)?.name ?? "";
     const to = c.get("team").find((u) => u.id === reassignedTo)?.name ?? "";
+    reassignNote = `הועברה מ${from} אל ${to}`;
     await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "reassigned", note: `${from} ← ${to}` }).run();
     await queueTaskNotification(db, reassignedTo, me.id, id);
   }
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
-  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, reassignedTo !== null ? "reassigned" : "edited", { extra: changes.join(" · ") || undefined }));
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, reassignedTo !== null ? "reassigned" : "edited", { extra: [reassignNote, ...changes].filter(Boolean).join(" · ") || undefined }));
   return c.json({ ok: true, task: toTask(updated!) });
 });
 

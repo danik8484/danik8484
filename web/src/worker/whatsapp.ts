@@ -6,8 +6,10 @@ import type { AppSettings } from "@shared/types";
  * - Login codes: an AUTHENTICATION template (body with {{1}} = code and a copy-code button).
  * Credentials live in the admin settings screen (database), not in the repository.
  */
+export const WA_PHONE_ID_RE = /^\d{5,25}$/;
+
 export function whatsappConfigured(s: AppSettings): boolean {
-  return !!(s.whatsappToken && s.whatsappPhoneId);
+  return s.whatsappToken.length >= 20 && WA_PHONE_ID_RE.test(s.whatsappPhoneId);
 }
 
 /** Template parameters may not contain newlines, tabs or 4+ consecutive spaces. */
@@ -16,7 +18,7 @@ function sanitizeParam(text: string): string {
 }
 
 async function post(s: AppSettings, body: unknown): Promise<void> {
-  const res = await fetch(`https://graph.facebook.com/v20.0/${s.whatsappPhoneId}/messages`, {
+  const res = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(s.whatsappPhoneId)}/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${s.whatsappToken}`, "content-type": "application/json" },
     body: JSON.stringify(body),

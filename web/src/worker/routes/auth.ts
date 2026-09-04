@@ -28,7 +28,8 @@ authRoutes.post("/request-code", async (c) => {
     const userId = int(body.userId);
     const user = userId === null ? undefined : await db.select().from(users).where(and(eq(users.id, userId), eq(users.active, 1))).get();
     if (!user) return c.json({ error: "איש צוות לא נמצא" }, 404);
-    const issued = await issueCode(db, `user:${user.id}`);
+    const dev = c.env.APP_ENV === "development";
+    const issued = await issueCode(db, `user:${user.id}`, dev ? null : (c.req.header("cf-connecting-ip") ?? null), dev ? 0 : undefined);
     if (!issued.ok) return c.json({ error: issued.error }, issued.status as 429);
     const s = await getSettings(db, c.env);
     if (user.phone && whatsappConfigured(s)) {
@@ -39,7 +40,7 @@ authRoutes.post("/request-code", async (c) => {
         return c.json({ error: "שליחת הקוד לוואטסאפ נכשלה. נסה שוב או בקש מהמנהל קישור כניסה." }, 502);
       }
     } else if (c.env.APP_ENV !== "development") {
-      return c.json({ error: !user.phone ? "לא מוגדר מספר טלפון לאיש הצוות הזה. בקש מהמנהל להוסיף אותו, או קישור כניסה." : "שליחת קודים בוואטסאפ עדיין לא הופעלה. בקש מהמנהל קישור כניסה." }, 503);
+      return c.json({ error: "אי אפשר לשלוח קוד לוואטסאפ כרגע. בקש מהמנהל קישור כניסה." }, 503);
     }
     const masked = user.phone ? `•••${user.phone.slice(-4)}` : "";
     return c.json({ ok: true, to: masked, devCode: c.env.APP_ENV === "development" ? issued.code : undefined });

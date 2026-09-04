@@ -1,7 +1,10 @@
 import type { AppSettings } from "@shared/types";
 
+export const TELEGRAM_TOKEN_RE = /^\d{5,20}:[A-Za-z0-9_-]{20,100}$/;
+export const TELEGRAM_CHAT_RE = /^-?\d{1,20}$/;
+
 export function telegramConfigured(s: AppSettings): boolean {
-  return !!(s.telegramBotToken && s.telegramChatId);
+  return TELEGRAM_TOKEN_RE.test(s.telegramBotToken) && TELEGRAM_CHAT_RE.test(s.telegramChatId);
 }
 
 export function escapeHtml(t: string): string {
@@ -10,7 +13,7 @@ export function escapeHtml(t: string): string {
 
 /** Send an HTML-formatted message to the admin's Telegram chat. */
 export async function sendTelegram(s: AppSettings, html: string, chatId = s.telegramChatId): Promise<void> {
-  const res = await fetch(`https://api.telegram.org/bot${s.telegramBotToken}/sendMessage`, {
+  const res = await fetch(`https://api.telegram.org/bot${encodeURIComponent(s.telegramBotToken)}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, text: html.slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true }),
@@ -23,7 +26,7 @@ export async function sendTelegram(s: AppSettings, html: string, chatId = s.tele
 
 /** Find chats that recently messaged the bot (so the admin can pick their chat id). */
 export async function telegramRecentChats(token: string): Promise<{ id: string; name: string }[]> {
-  const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=50`);
+  const res = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/getUpdates?limit=50`);
   if (!res.ok) throw new Error(`Telegram ${res.status}`);
   const data = (await res.json()) as { result?: { message?: { chat?: { id: number; first_name?: string; last_name?: string; username?: string; title?: string } } }[] };
   const seen = new Map<string, string>();

@@ -57,3 +57,11 @@ export function endOfLocalDay(tz: string, isoDate: string): string {
   next.setUTCDate(next.getUTCDate() + 1);
   return startOfLocalDay(tz, next.toISOString().slice(0, 10));
 }
+
+const WD = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+/** "0,1,2" → "א׳, ב׳, ג׳" (or "כל יום"). */
+export function fmtWeekdaysHe(weekdays: string): string {
+  const days = weekdays.split(",").filter(Boolean).map(Number);
+  if (days.length === 7) return "כל יום";
+  return days.map((d) => WD[d]).join(", ");
+}

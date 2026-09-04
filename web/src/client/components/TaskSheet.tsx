@@ -40,6 +40,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const load = useCallback(async () => {
     if (taskId === null) return;
     const res = await api.task(taskId);
+    if (res.task.id !== taskId) return; // a different task was opened meanwhile
     setTask(res.task);
     setEvents(res.events);
     setPhotos(res.attachments);
@@ -69,7 +70,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     .map((d) => ({ name: d.name.trim(), amount: d.amount === "" ? 0 : Number(d.amount), method: d.method }));
   const dealsIncomplete = cleanDeals.some((d) => d.name.split(/\s+/).length < 2 || !(d.amount > 0) || !d.method);
   const metricsDirty = task ? task.kind === "leads" && (JSON.stringify(cleanDeals) !== JSON.stringify(task.deals) || calls !== (task.metricCalls == null ? "" : String(task.metricCalls))) : false;
-  const statusDirty = task ? status !== task.status || (status === "in_progress" && note !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") || metricsDirty : false;
+  const statusDirty = task ? status !== task.status || (status === "in_progress" && note.trim() !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") || metricsDirty : false;
 
   async function saveStatus() {
     if (!task) return;
@@ -79,7 +80,6 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
       if (task.kind === "leads" && dealsIncomplete) throw new Error("לכל נסלק חובה שם מלא, סכום ואמצעי תשלום");
       await api.setStatus(task.id, status, note, task.kind === "leads" ? { deals: cleanDeals, metricCalls: calls === "" ? null : Number(calls) } : undefined);
       await load();
-      setNote(status === "in_progress" ? note : "");
       onChanged();
     } catch (e) {
       setError((e as Error).message);

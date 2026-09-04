@@ -62,7 +62,7 @@ test("urgent tasks sit on top in bold with a siren; high priority precedes norma
   await page.context().close();
 });
 
-test("managers can send an immediate full-detail notice instead of the digest", async ({ browser, request }) => {
+test("managers can send an immediate full-detail notice; unreachable recipients fall back to the digest", async ({ browser, request }) => {
   await apiLogin(request, "uri.h@example.com");
   const before = (await (await request.get("/api/push/pending")).json()).pending;
   await request.post("/api/auth/logout");
@@ -78,7 +78,9 @@ test("managers can send an immediate full-detail notice instead of the digest", 
 
   await apiLogin(request, "uri.h@example.com");
   const after = (await (await request.get("/api/push/pending")).json()).pending;
-  expect(after).toBe(before); // nothing queued: it was sent right away
+  // In this test environment Uri has no reachable device or WhatsApp, so the immediate notice
+  // falls back to the digest queue instead of being lost (exactly one entry for this task).
+  expect(after).toBe(before + 1);
   await request.post("/api/auth/logout");
 
   // Employees never get the option (server ignores it)
@@ -134,13 +136,15 @@ test("settings are admin-only, validated, and daily reminder times default to 21
   expect(s.reminderTimes).toEqual(["21:00", "21:00", "21:00", "21:00", "21:00", "14:00", "19:00"]);
   expect(s.telegramConfigured).toBe(false);
   expect((await request.put("/api/settings", { data: { reminderTimes: ["25:00", "", "", "", "", "", ""] } })).status()).toBe(400);
+  expect((await request.put("/api/settings", { data: { telegramBotToken: "bad-token" } })).status()).toBe(400);
+  expect((await request.put("/api/settings", { data: { telegramChatId: "abc" } })).status()).toBe(400);
   expect((await request.put("/api/settings", { data: { reminderTimes: ["20:30", "21:00", "21:00", "21:00", "21:00", "", "19:00"], telegramChatId: "12345" } })).status()).toBe(200);
   const s2 = await (await request.get("/api/settings")).json();
   expect(s2.reminderTimes[0]).toBe("20:30");
   expect(s2.reminderTimes[5]).toBe("");
   expect(s2.telegramChatId).toBe("12345");
   // Secrets are masked and kept when left empty
-  expect((await request.put("/api/settings", { data: { telegramBotToken: "123456789:ABCDEFtoken" } })).status()).toBe(200);
+  expect((await request.put("/api/settings", { data: { telegramBotToken: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd" } })).status()).toBe(200);
   const s3 = await (await request.get("/api/settings")).json();
   expect(s3.telegramBotToken).toMatch(/^1234••••/);
   expect(s3.telegramConfigured).toBe(true);

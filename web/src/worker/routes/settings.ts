@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../context";
 import { getSettings, saveSettings, mask, DEFAULT_REMINDERS } from "../settings";
-import { sendTelegram, telegramConfigured, telegramRecentChats } from "../telegram";
-import { sendWhatsApp, whatsappConfigured } from "../whatsapp";
+import { sendTelegram, telegramConfigured, telegramRecentChats, TELEGRAM_TOKEN_RE, TELEGRAM_CHAT_RE } from "../telegram";
+import { sendWhatsApp, whatsappConfigured, WA_PHONE_ID_RE } from "../whatsapp";
 import { readJson, str, phone as parsePhone } from "../validate";
 import type { AppSettings } from "@shared/types";
 
@@ -35,7 +35,9 @@ settingsRoutes.put("/", async (c) => {
   // Secrets: an empty string keeps the stored value; the literal "-" clears it.
   const secret = (v: unknown, cur: string) => (typeof v !== "string" || v === "" ? cur : v.trim() === "-" ? "" : v.trim());
   next.telegramBotToken = secret(body.telegramBotToken, current.telegramBotToken);
+  if (next.telegramBotToken && !TELEGRAM_TOKEN_RE.test(next.telegramBotToken)) return c.json({ error: "ה-token של הבוט לא נראה תקין (פורמט 123456789:AA...)" }, 400);
   next.whatsappToken = secret(body.whatsappToken, current.whatsappToken);
+  if (next.whatsappToken && !/^[A-Za-z0-9_.-]{20,600}$/.test(next.whatsappToken)) return c.json({ error: "ה-Access token של וואטסאפ לא נראה תקין" }, 400);
   for (const k of ["telegramChatId", "whatsappPhoneId", "whatsappTemplate", "whatsappLoginTemplate", "whatsappLang"] as const) {
     if (body[k] !== undefined) {
       const v = str(body[k], 200, { required: false });
@@ -43,6 +45,10 @@ settingsRoutes.put("/", async (c) => {
       next[k] = v;
     }
   }
+  if (next.telegramChatId && !TELEGRAM_CHAT_RE.test(next.telegramChatId)) return c.json({ error: "Chat ID חייב להיות מספר" }, 400);
+  if (next.whatsappPhoneId && !WA_PHONE_ID_RE.test(next.whatsappPhoneId)) return c.json({ error: "Phone number ID חייב להיות מספר" }, 400);
+  for (const k of ["whatsappTemplate", "whatsappLoginTemplate"] as const) if (next[k] && !/^[a-z0-9_]{1,100}$/.test(next[k])) return c.json({ error: "שם תבנית: אותיות קטנות באנגלית, ספרות וקו תחתון" }, 400);
+  if (next.whatsappLang && !/^[a-z]{2}(_[A-Z]{2})?$/.test(next.whatsappLang)) return c.json({ error: "קוד שפה לא תקין (למשל he)" }, 400);
   if (body.telegramNotifyOwnActions !== undefined) next.telegramNotifyOwnActions = body.telegramNotifyOwnActions === true;
   if (body.reminderTimes !== undefined) {
     const arr = body.reminderTimes;
