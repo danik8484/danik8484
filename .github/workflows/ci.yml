@@ -66,3 +66,14 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_API_TOKEN || secrets.CFTOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.account.outputs.account_id }}
+      # First request applies pending migrations; 401 from /api/me means the Worker is up and the schema is ready.
+      - name: Health check
+        if: steps.token.outputs.present == 'true'
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://fitness-daily-tasks.planet-kicker.workers.dev/api/me)
+            echo "attempt $i: HTTP $code"
+            [ "$code" = "401" ] && exit 0
+            sleep 5
+          done
+          echo "site did not come up correctly"; exit 1
