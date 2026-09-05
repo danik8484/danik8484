@@ -1,4 +1,4 @@
-/** coordinator = "רכז": sees every board except the admin's and adds tasks to anyone, but manages nobody and cannot be assigned tasks. */
+/** coordinator = "רכז": a regular team member (own board, direct manager) who also sees every non-admin, non-coordinator board and may add a task to anyone; on other people's cards they change nothing. */
 export type Role = "admin" | "manager" | "employee" | "coordinator";
 export type TaskStatus = "open" | "in_progress" | "done";
 export type TaskKind = "normal" | "leads";

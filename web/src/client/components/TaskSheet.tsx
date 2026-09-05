@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type Attachment, type Deal, type PaymentMethod, type Task, type TaskEvent, type TaskStatus } from "@shared/types";
 
 type DealDraft = { name: string; amount: string; method: PaymentMethod | "" };
-import { canAttachPhoto, canEditOrDelete, canManage, canMarkDone, isCoordinator, noteRequiredForInProgress, taskTier } from "@shared/permissions";
+import { canAttachPhoto, canEditOrDelete, canManage, canMarkDone, noteRequiredForInProgress, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
@@ -499,7 +499,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                   {lightbox.fileName} · {s.nameOf(lightbox.uploadedById)} · {fmtDateTime(lightbox.createdAt)}
                 </span>
                 <div className="flex shrink-0 gap-2">
-                  {!isCoordinator(s.user) && (lightbox.uploadedById === s.user.id || s.user.role === "admin") && (
+                  {(s.user.role === "admin" || (lightbox.uploadedById === s.user.id && canAttachPhoto(s.user, task, s.users))) && (
                     <button className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold" onClick={() => removePhoto(lightbox)}>
                       מחיקה
                     </button>

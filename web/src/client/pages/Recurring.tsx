@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RecurringTask } from "@shared/types";
-import { canEditOrDelete } from "@shared/permissions";
+import { canEditOrDelete, canManage } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, Empty, ErrorText, Field, Modal, Spinner, inputCls } from "../components/ui";
@@ -50,7 +50,7 @@ export default function Recurring() {
       ) : (
         <ul className="space-y-2">
           {items.map((r) => {
-            const editable = canEditOrDelete(s.user, r, s.users);
+            const editable = canManage(s.user, r.assigneeId, s.users) && canEditOrDelete(s.user, r, s.users);
             return (
               <li key={r.id} className={`rounded-2xl bg-white p-3 shadow-sm ${r.active ? "" : "opacity-60"}`}>
                 <div className="flex items-start justify-between gap-2">

@@ -4,7 +4,7 @@ import type { AppEnv } from "../context";
 import { recurringTasks } from "../db/schema";
 import { toRecurring, toPublicUser } from "../serialize";
 import { visibleIdsFor } from "../team";
-import { canEditOrDelete, canManage, canSeeDealsAndRecurring, isCoordinator } from "@shared/permissions";
+import { canEditOrDelete, canManage } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import { localDate, nowIso } from "../dates";
 import { materializeRecurring } from "../recurring";
@@ -15,7 +15,6 @@ export const recurringRoutes = new Hono<AppEnv>();
 
 recurringRoutes.get("/", async (c) => {
   const db = c.get("db");
-  if (!canSeeDealsAndRecurring(c.get("user"))) return c.json({ error: "אין הרשאה" }, 403);
   const visible = visibleIdsFor(c.get("user"), c.get("team"));
   if (visible.length === 0) return c.json({ recurring: [] });
   const rows = await db
@@ -56,10 +55,7 @@ recurringRoutes.patch("/:id", async (c) => {
     if (!wds || wds.length === 0) return c.json({ error: "יש לבחור לפחות יום אחד" }, 400);
     patch.weekdays = wds.join(",");
   }
-  if (body.active !== undefined) {
-    if (body.active && teamPublic.some((u) => u.id === row.assigneeId && isCoordinator(u))) return c.json({ error: "לרכז אין לו\"ז. אי אפשר להפעיל משימה קבועה עבורו" }, 400);
-    patch.active = body.active ? 1 : 0;
-  }
+  if (body.active !== undefined) patch.active = body.active ? 1 : 0;
   if (body.kind !== undefined) patch.kind = body.kind === "leads" ? "leads" : "normal";
   await db.update(recurringTasks).set(patch).where(eq(recurringTasks.id, id)).run();
   const updated = await db.select().from(recurringTasks).where(eq(recurringTasks.id, id)).get();

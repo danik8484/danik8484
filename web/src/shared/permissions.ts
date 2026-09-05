@@ -1,9 +1,9 @@
 import type { PublicUser, Task } from "./types";
 
 /**
- * "רכז" (coordinator): sees the boards of the whole team except the admin's, and may add a task to anyone
- * (the same way any teammate sends a request). Beyond that, changes nothing: no status, no notes, no photos,
- * no recurring tasks, and nobody can assign a task to a coordinator (they have no board of their own).
+ * "רכז" (coordinator): a regular team member (own board, a direct manager, receives tasks from anyone) who in
+ * addition SEES every non-admin, non-coordinator board and may add a task to anyone (the same way any teammate
+ * sends a request). On other people's boards they change nothing: no status, no notes, no photos.
  * The client hides the buttons; the server enforces every rule below.
  */
 export function isCoordinator(u: Pick<PublicUser, "role">): boolean {
@@ -13,8 +13,8 @@ export function isCoordinator(u: Pick<PublicUser, "role">): boolean {
 /** Which users' cards the viewer may see. */
 export function visibleUserIds(viewer: PublicUser, all: PublicUser[]): number[] {
   if (viewer.role === "admin") return all.map((u) => u.id);
-  // A coordinator sees everyone who has a board: not the admin, and not coordinators (they have no tasks).
-  if (isCoordinator(viewer)) return all.filter((u) => u.role !== "admin" && !isCoordinator(u)).map((u) => u.id);
+  // A coordinator sees their own board and everyone else's, except the admin's (and other coordinators').
+  if (isCoordinator(viewer)) return all.filter((u) => u.id === viewer.id || (u.role !== "admin" && !isCoordinator(u))).map((u) => u.id);
   return all.filter((u) => u.id === viewer.id || u.managerId === viewer.id).map((u) => u.id);
 }
 
@@ -22,9 +22,9 @@ export function canView(viewer: PublicUser, targetId: number, all: PublicUser[])
   return visibleUserIds(viewer, all).includes(targetId);
 }
 
-/** Change status / update notes / add photos / set recurring tasks on the target's card. Same as viewing, except a coordinator manages nobody. */
+/** Change status / update notes / add photos / set recurring tasks on the target's card. Same as viewing, except a coordinator manages only their own card. */
 export function canManage(viewer: PublicUser, targetId: number, all: PublicUser[]): boolean {
-  if (isCoordinator(viewer)) return false;
+  if (isCoordinator(viewer)) return targetId === viewer.id;
   return canView(viewer, targetId, all);
 }
 
@@ -36,8 +36,8 @@ export function canManage(viewer: PublicUser, targetId: number, all: PublicUser[
  */
 export function canEditOrDelete(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById"> & Partial<Pick<Task, "recurringId">>, all: PublicUser[]): boolean {
   if (viewer.role === "admin") return true;
-  // Instances of a recurring task carry the template author's id; a coordinator (even one who used to be a manager) never manages those.
-  if (isCoordinator(viewer) && task.recurringId) return false;
+  // Instances of a recurring task carry the template author's id; a coordinator (even one who used to be a manager) manages only their own.
+  if (isCoordinator(viewer) && task.recurringId && task.assigneeId !== viewer.id) return false;
   if (task.createdById === viewer.id) return true;
   if (task.createdById === task.assigneeId && task.assigneeId !== viewer.id && canManage(viewer, task.assigneeId, all)) return true;
   return false;
@@ -47,18 +47,15 @@ export function canSeeActivityLog(viewer: PublicUser): boolean {
   return viewer.role === "admin" || viewer.role === "manager";
 }
 
-/** The deals and recurring-tasks screens: everyone but a coordinator (a coordinator gets the board only). */
-export function canSeeDealsAndRecurring(viewer: Pick<PublicUser, "role">): boolean {
+/** The deals screen (customers and money): everyone but a coordinator. */
+export function canSeeDeals(viewer: Pick<PublicUser, "role">): boolean {
   return !isCoordinator(viewer);
 }
 
-/**
- * Anyone may add a one-off task to any active teammate, even without seeing their schedule –
- * except that nobody adds a task to a coordinator.
- */
+/** Anyone may add a one-off task to any active teammate, even without seeing their schedule. */
 export function canAssignTask(targetId: number, all: PublicUser[]): boolean {
   const t = all.find((u) => u.id === targetId);
-  return !!t && t.active && !isCoordinator(t);
+  return !!t && t.active;
 }
 
 /**
@@ -75,9 +72,12 @@ export function taskTier(task: Pick<Task, "assigneeId" | "createdById">, all: Pu
   return 2;
 }
 
-/** Photos are part of managing a task: whoever may open it may attach one, except a coordinator. */
-export function canAttachPhoto(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById">, all: PublicUser[]): boolean {
-  if (isCoordinator(viewer)) return false;
+/**
+ * Photos: whoever may open a task may attach one – except that a coordinator attaches only on their own card or on
+ * one-off tasks they added (instances of a recurring task carry the template author's id, which grants nothing).
+ */
+export function canAttachPhoto(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById"> & Partial<Pick<Task, "recurringId">>, all: PublicUser[]): boolean {
+  if (isCoordinator(viewer)) return task.assigneeId === viewer.id || (!task.recurringId && task.createdById === viewer.id);
   return canOpenTask(viewer, task, all);
 }
 

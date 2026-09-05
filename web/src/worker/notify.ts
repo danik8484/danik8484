@@ -151,7 +151,7 @@ export async function sendDayEndReminders(env: Env, db: Db, appUrl: string, now 
   const candidates = await db
     .select()
     .from(users)
-    .where(and(eq(users.active, 1), ne(users.role, "coordinator"), or(isNull(users.reminderSentDate), ne(users.reminderSentDate, today))))
+    .where(and(eq(users.active, 1), or(isNull(users.reminderSentDate), ne(users.reminderSentDate, today))))
     .all();
   let sent = 0;
   for (const u of candidates) {

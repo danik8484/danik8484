@@ -18,15 +18,15 @@ export async function materializeRecurring(db: Db, today: string, force = false)
 
   const wd = weekdayOf(today);
   const rows = await db
-    .select({ r: recurringTasks, assigneeActive: users.active, assigneeRole: users.role })
+    .select({ r: recurringTasks, assigneeActive: users.active })
     .from(recurringTasks)
     .innerJoin(users, eq(users.id, recurringTasks.assigneeId))
     .where(and(eq(recurringTasks.active, 1), isNull(recurringTasks.deletedAt), lte(recurringTasks.startDate, today)))
     .all();
 
   let created = 0;
-  for (const { r, assigneeActive, assigneeRole } of rows) {
-    if (!assigneeActive || assigneeRole === "coordinator") continue;
+  for (const { r, assigneeActive } of rows) {
+    if (!assigneeActive) continue;
     const days = r.weekdays.split(",").filter(Boolean).map(Number);
     if (!days.includes(wd)) continue;
     const inserted = await db

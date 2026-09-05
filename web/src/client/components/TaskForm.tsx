@@ -17,10 +17,10 @@ interface Props {
 
 export default function TaskForm({ defaultAssigneeId, defaultDate, existing, forceRecurring = false, onSaved, onCancel }: Props) {
   const s = useSession();
-  // Nobody assigns a task to a coordinator: they have no board.
-  const allActive = s.users.filter((u) => u.active && !isCoordinator(u));
-  const managed = allActive.filter((u) => s.canSee(u.id));
-  const others = allActive.filter((u) => !s.canSee(u.id));
+  const allActive = s.users.filter((u) => u.active);
+  // "Managed" = boards I run (mine, my reports'; a coordinator: only their own). Everyone else gets a request.
+  const managed = allActive.filter((u) => canManage(s.user, u.id, s.users));
+  const others = allActive.filter((u) => !canManage(s.user, u.id, s.users));
   const [title, setTitle] = useState(existing?.title ?? "");
   const [details, setDetails] = useState(existing?.details ?? "");
   const [assigneeId, setAssigneeId] = useState(existing?.assigneeId ?? defaultAssigneeId);
@@ -31,8 +31,11 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
   const [priority, setPriority] = useState<TaskPriority>(existing?.priority ?? "normal");
   const [notifyNow, setNotifyNow] = useState(false);
   const isManager = s.user.role !== "employee" && !isCoordinator(s.user);
-  // Recurring tasks are for people whose board you manage (a coordinator manages nobody).
+  // Recurring tasks are for people whose board you manage (a coordinator manages only their own).
   const canRecur = canManage(s.user, assigneeId, s.users);
+  // An instance of a recurring task keeps its person and its date; a task with a manager's reminder stays where it is.
+  const instance = !!existing?.recurringId;
+  const assigneeLocked = instance || (!!existing?.reminderAt && isCoordinator(s.user) && existing!.assigneeId !== s.user.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,7 +49,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
     setError("");
     try {
       if (existing) {
-        await api.updateTask(existing.id, { title, details, dueDate, assigneeId, ...(existing.recurringId ? {} : { priority }) });
+        await api.updateTask(existing.id, { title, details, ...(existing.recurringId ? {} : { dueDate, assigneeId, priority }) });
       } else {
         if (recurring && weekdays.length === 0) throw new Error("יש לבחור לפחות יום אחד");
         await api.createTask({
@@ -78,7 +81,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="איש צוות">
-          <select className={inputCls} value={assigneeId} onChange={(e) => setAssigneeId(Number(e.target.value))}>
+          <select className={inputCls} value={assigneeId} onChange={(e) => setAssigneeId(Number(e.target.value))} disabled={assigneeLocked}>
             {managed.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.id === s.user.id ? `${u.name} (אני)` : u.name}
@@ -96,9 +99,11 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
           </select>
         </Field>
         <Field label={recurring ? "החל מתאריך" : "תאריך יעד"}>
-          <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+          <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required disabled={instance} />
         </Field>
       </div>
+      {instance && <p className="text-xs text-slate-500">משימה קבועה: איש הצוות והתאריך נקבעים אוטומטית.</p>}
+      {!instance && assigneeLocked && <p className="text-xs text-slate-500">על המשימה יש תזכורת של המנהל, לכן אי אפשר להעביר אותה לאיש צוות אחר.</p>}
 
       {!recurring && !existing?.recurringId && (
         <fieldset>
@@ -139,9 +144,10 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
           </span>
         </label>
       )}
-      {!s.canSee(assigneeId) && (
+      {!canManage(s.user, assigneeId, s.users) && assigneeId !== s.user.id && (
         <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
-          המשימה תופיע אצל {s.nameOf(assigneeId)} כבקשה ממך. תוכל לעקוב אחרי הסטטוס שלה ב"משימות ששלחתי לאחרים", בלי לראות את שאר הלו"ז.
+          המשימה תופיע אצל {s.nameOf(assigneeId)} כבקשה ממך.
+          {!s.canSee(assigneeId) && ' תוכל לעקוב אחרי הסטטוס שלה ב"משימות ששלחתי לאחרים", בלי לראות את שאר הלו"ז.'}
         </p>
       )}
       {!existing && (

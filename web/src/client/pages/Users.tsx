@@ -142,7 +142,7 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
     setBusy(true);
     setError("");
     try {
-      const payload = { name, email: email.trim() ? email.trim() : null, phone: phone.trim() ? phone.trim() : null, role, managerId: role === "admin" || role === "coordinator" || managerId === "" ? null : Number(managerId) };
+      const payload = { name, email: email.trim() ? email.trim() : null, phone: phone.trim() ? phone.trim() : null, role, managerId: role === "admin" || managerId === "" ? null : Number(managerId) };
       if (user) await api.updateUser(user.id, { ...payload, active });
       else await api.createUser(payload);
       onSaved();
@@ -173,7 +173,7 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
             <option value="coordinator">רכז</option>
           </select>
         </Field>
-        {role !== "admin" && role !== "coordinator" && (
+        {role !== "admin" && (
           <Field label="מנהל ישיר">
             <select className={inputCls} value={managerId} onChange={(e) => setManagerId(e.target.value === "" ? "" : Number(e.target.value))} required>
               <option value="">בחר...</option>
@@ -187,7 +187,7 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
         )}
       </div>
       <p className="text-xs text-slate-500">
-        מנהל ראשי רואה את כולם. מנהל רואה את עצמו ואת אנשי הצוות שהוא המנהל הישיר שלהם. איש צוות רואה רק את עצמו. רכז רואה את הלו"ז של כל הצוות (לא של המנהל הראשי) ומוסיף משימות לכולם, אבל לא משנה סטטוס ואי אפשר לתת לו משימות.
+        מנהל ראשי רואה את כולם. מנהל רואה את עצמו ואת אנשי הצוות שהוא המנהל הישיר שלהם. איש צוות רואה רק את עצמו. רכז הוא איש צוות (עם לו"ז משלו ומנהל ישיר) שגם רואה את הלו"ז של כל הצוות (לא של המנהל הראשי ולא של רכזים אחרים) ומוסיף משימות לכולם. אצל אחרים הוא לא משנה סטטוס ולא מצרף תמונות, חוץ מלמשימות שהוא עצמו הוסיף.
       </p>
       {user && !isSelf && (
         <label className="flex items-center gap-2 text-sm font-semibold text-ink-700">

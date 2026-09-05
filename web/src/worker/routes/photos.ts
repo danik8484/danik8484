@@ -4,7 +4,7 @@ import type { AppEnv } from "../context";
 import type { Db } from "../db/client";
 import { tasks, taskAttachments, taskEvents } from "../db/schema";
 import { toAttachment, toPublicUser } from "../serialize";
-import { canAttachPhoto, canOpenTask, isCoordinator } from "@shared/permissions";
+import { canAttachPhoto, canOpenTask } from "@shared/permissions";
 import { chunk, int } from "../validate";
 import { nowIso } from "../dates";
 import { adminFeedFor } from "../notify";
@@ -85,7 +85,9 @@ photoRoutes.post("/photos/:id/thumb", async (c) => {
   const id = int(c.req.param("id"));
   if (id === null) return c.json({ error: "לא נמצא" }, 404);
   const row = await db.select().from(taskAttachments).where(and(eq(taskAttachments.id, id), isNull(taskAttachments.deletedAt))).get();
-  if (!row || row.uploadedById !== me.id || isCoordinator(me)) return c.json({ error: "לא נמצא" }, 404);
+  if (!row || row.uploadedById !== me.id) return c.json({ error: "לא נמצא" }, 404);
+  const owner = await db.select().from(tasks).where(eq(tasks.id, row.taskId)).get();
+  if (!owner || !canAttachPhoto(toPublicUser(me, false), owner, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
   if (Number(c.req.header("content-length") || 0) > 150_000) return c.json({ error: "תצוגה מקדימה גדולה מדי" }, 413);
   const bytes = await c.req.arrayBuffer();
   if (bytes.byteLength === 0 || bytes.byteLength > 150_000) return c.json({ error: "תצוגה מקדימה גדולה מדי" }, 413);
@@ -124,7 +126,12 @@ photoRoutes.delete("/photos/:id", async (c) => {
   if (id === null) return c.json({ error: "לא נמצא" }, 404);
   const row = await db.select().from(taskAttachments).where(and(eq(taskAttachments.id, id), isNull(taskAttachments.deletedAt))).get();
   if (!row) return c.json({ error: "לא נמצא" }, 404);
-  if (isCoordinator(me) || (row.uploadedById !== me.id && me.role !== "admin")) return c.json({ error: "רק מי שהעלה את התמונה (או המנהל הראשי) יכול למחוק אותה" }, 403);
+  if (row.uploadedById !== me.id && me.role !== "admin") return c.json({ error: "רק מי שהעלה את התמונה (או המנהל הראשי) יכול למחוק אותה" }, 403);
+  if (me.role !== "admin") {
+    // The uploader may remove it only while they may still attach photos to that task (a coordinator's reach can shrink).
+    const owner = await db.select().from(tasks).where(eq(tasks.id, row.taskId)).get();
+    if (!owner || !canAttachPhoto(toPublicUser(me, false), owner, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  }
   await db.update(taskAttachments).set({ deletedAt: nowIso(), deletedById: me.id }).where(eq(taskAttachments.id, id)).run();
   await c.env.FILES.delete(row.kvKey);
   if (row.thumbKey) await c.env.FILES.delete(row.thumbKey);

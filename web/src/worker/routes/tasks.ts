@@ -4,12 +4,12 @@ import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
 import { listAttachments, photoCounts } from "./photos";
-import { adminFeedFor, adminFeedText, notifyTaskNow, queueTaskNotification } from "../notify";
+import { adminFeedFor, adminFeedText, notifyTaskNow, notifyUser, queueTaskNotification, shortName } from "../notify";
 import { fmtWeekdaysHe } from "../dates";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
-import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, canSeeActivityLog, canSeeDealsAndRecurring, isCoordinator, noteRequiredForInProgress } from "@shared/permissions";
+import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, canSeeActivityLog, canSeeDeals, isCoordinator, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type BoardResponse, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
 import { parseDeals } from "../serialize";
@@ -172,8 +172,6 @@ taskRoutes.post("/:id/status", async (c) => {
   if (!row) return c.json({ error: "לא נמצא" }, 404);
   const mePublic = toPublicUser(me, false);
   if (!canManage(mePublic, row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
-  // A coordinator has no board: a task that somehow points at one cannot be worked on, only moved or deleted.
-  if (c.get("teamPublic").some((u) => u.id === row.assigneeId && isCoordinator(u))) return c.json({ error: "לרכז אין לו\"ז. העבר את המשימה לאיש צוות אחר" }, 400);
   if (status !== row.status && !canChangeStatus(mePublic, row, status, c.get("teamPublic"))) {
     return c.json(
       { error: row.status === "done" ? "רק המנהל יכול לפתוח מחדש משימה שסומנה כהושלמה." : "רק המנהל יכול לסמן 'הושלם' על משימה שניתנה על ידי מישהו אחר. סמן 'בתהליך' וכתוב מה בוצע." },
@@ -242,7 +240,12 @@ taskRoutes.post("/:id/status", async (c) => {
     patch.completedById = null;
   }
   if (!changed && !note && metricNotes.length === 0 && patch.progressNote === undefined) return c.json({ ok: true, task: toTask(row) });
-  await db.update(tasks).set(patch).where(eq(tasks.id, id)).run();
+  // Two people closing the same task at once: only the write that sees the status it read gets to log and notify.
+  const won = await db.update(tasks).set(patch).where(and(eq(tasks.id, id), eq(tasks.status, row.status), isNull(tasks.deletedAt))).returning({ id: tasks.id }).get();
+  if (!won) {
+    const current = await db.select().from(tasks).where(eq(tasks.id, id)).get();
+    return c.json({ ok: true, task: toTask(current ?? row) });
+  }
   await db
     .insert(taskEvents)
     .values({
@@ -258,6 +261,17 @@ taskRoutes.post("/:id/status", async (c) => {
   c.executionCtx.waitUntil(
     adminFeedFor(c.env, db, id, me, changed ? "status" : "note", { note: [note ?? "", metricNotes.join(" · ")].filter(Boolean).join(" · "), fromStatus: row.status, toStatus: status }),
   );
+  // Whoever gave the task hears right away that it is done (unless they closed it themselves).
+  if (changed && status === "done" && row.createdById !== me.id) {
+    const team = c.get("team");
+    const creator = team.find((u) => u.id === row.createdById);
+    if (creator && creator.active === 1) {
+      const origin = new URL(c.req.url).origin;
+      c.executionCtx.waitUntil(
+        notifyUser(c.env, db, creator.id, { title: "✅ משימה שנתת הושלמה", body: `${row.title} · הושלמה על ידי ${shortName(me.name, team, me.id)}`, url: `${origin}/?task=${id}`, tag: `done-${id}` }),
+      );
+    }
+  }
   return c.json({ ok: true, task: toTask(updated!) });
 });
 
@@ -347,8 +361,8 @@ taskRoutes.patch("/:id", async (c) => {
       // Only a *new* assignee must be active; editing a task whose assignee was deactivated stays possible.
       if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "איש צוות לא תקין" }, 400);
       if (row.recurringId) return c.json({ error: "משימה קבועה אי אפשר להעביר לאיש צוות אחר" }, 400);
-      // A coordinator manages nobody, so moving a task would silently drop a reminder a manager set on it.
-      if (row.reminderAt && isCoordinator(me)) return c.json({ error: "על המשימה יש תזכורת. רק המנהל של איש הצוות יכול להעביר אותה" }, 403);
+      // A coordinator manages only their own card, so moving a task off someone else's card would silently drop a manager's reminder.
+      if (row.reminderAt && isCoordinator(me) && row.assigneeId !== me.id) return c.json({ error: "על המשימה יש תזכורת. רק המנהל של איש הצוות יכול להעביר אותה" }, 403);
       patch.assigneeId = assigneeId;
       reassignedTo = assigneeId;
       // A reminder follows the task only when the editor manages the new assignee's card.
@@ -402,7 +416,7 @@ export const dealRoutes = new Hono<AppEnv>();
 dealRoutes.get("/", async (c) => {
   const db = c.get("db");
   const me = c.get("user");
-  if (!canSeeDealsAndRecurring(me)) return c.json({ error: "אין הרשאה" }, 403);
+  if (!canSeeDeals(me)) return c.json({ error: "אין הרשאה" }, 403);
   const visible = visibleIdsFor(me, c.get("team"));
   const today = localDate(c.env.TIMEZONE);
   const from = isIsoDate(c.req.query("from")) ? (c.req.query("from") as string) : today.slice(0, 8) + "01";
