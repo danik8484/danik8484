@@ -43,8 +43,26 @@ jobs:
       - name: Check for deploy token
         id: token
         run: echo "present=${{ secrets.CLOUDFLARE_API_TOKEN != '' || secrets.CFTOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      # The token may see several Cloudflare accounts (e.g. a claimed temporary account):
+      # pick the one that already hosts the Worker, otherwise the first one.
+      - name: Pick the Cloudflare account
+        if: steps.token.outputs.present == 'true'
+        id: account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_API_TOKEN || secrets.CFTOKEN }}
+        run: |
+          set -euo pipefail
+          accounts=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50" | python3 -c 'import sys,json; print(" ".join(a["id"] for a in json.load(sys.stdin)["result"]))')
+          chosen=""
+          for id in $accounts; do
+            if curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$id/workers/scripts" | python3 -c 'import sys,json; sys.exit(0 if any(s["id"]=="fitness-daily-tasks" for s in json.load(sys.stdin).get("result",[])) else 1)'; then chosen=$id; break; fi
+          done
+          [ -n "$chosen" ] || chosen=$(echo $accounts | cut -d" " -f1)
+          echo "account_id=$chosen" >> "$GITHUB_OUTPUT"
+          echo "deploying to account $chosen"
       - name: Deploy (schema is applied by the Worker on first request)
         if: steps.token.outputs.present == 'true'
         run: npm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_API_TOKEN || secrets.CFTOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.account.outputs.account_id }}
