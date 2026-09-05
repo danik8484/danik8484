@@ -1,0 +1,261 @@
+<title>מדריך לו"ז יומי לרון</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Assistant:wght@400;600;700&display=swap">
+<style>
+  :root {
+    --bg: #f6f8f7;
+    --paper: #ffffff;
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --muted: #64748b;
+    --line: #dfe5e2;
+    --brand: #16a34a;
+    --brand-soft: #dcfce7;
+    --brand-ink: #14532d;
+    --urgent: #dc2626;
+    --urgent-soft: #fee2e2;
+    --high: #d97706;
+    --high-soft: #fef3c7;
+    --peer: #7c3aed;
+    --peer-soft: #ede9fe;
+    --mgmt: #0369a1;
+    --mgmt-soft: #e0f2fe;
+    --lock: #f1f5f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1220; --paper: #131c2e; --ink: #f1f5f9; --ink-2: #cbd5e1; --muted: #94a3b8; --line: #263247;
+      --brand: #4ade80; --brand-soft: #14361f; --brand-ink: #bbf7d0;
+      --urgent: #f87171; --urgent-soft: #3b1515; --high: #fbbf24; --high-soft: #3a2a08;
+      --peer: #c4b5fd; --peer-soft: #2a1f4d; --mgmt: #7dd3fc; --mgmt-soft: #0f2a3d; --lock: #1b2537;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1220; --paper: #131c2e; --ink: #f1f5f9; --ink-2: #cbd5e1; --muted: #94a3b8; --line: #263247;
+    --brand: #4ade80; --brand-soft: #14361f; --brand-ink: #bbf7d0;
+    --urgent: #f87171; --urgent-soft: #3b1515; --high: #fbbf24; --high-soft: #3a2a08;
+    --peer: #c4b5fd; --peer-soft: #2a1f4d; --mgmt: #7dd3fc; --mgmt-soft: #0f2a3d; --lock: #1b2537;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Assistant", "Heebo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 17px; line-height: 1.6; direction: rtl;
+  }
+  h1, h2, h3, .num, .app-name { font-family: "Heebo", "Assistant", system-ui, sans-serif; }
+  h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.25; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 18px 64px; }
+
+  header { padding: 28px 0 20px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .app-name { display: inline-flex; align-items: center; gap: 10px; font-weight: 900; font-size: 15px; color: var(--muted); letter-spacing: .02em; }
+  .app-name .mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: #fff; font-weight: 900; font-size: 17px; }
+  header h1 { font-size: 34px; font-weight: 900; margin-top: 14px; }
+  header p { margin: 10px 0 0; color: var(--ink-2); max-width: 36ch; }
+  .cta { display: inline-block; margin-top: 16px; background: var(--brand); color: #fff; text-decoration: none; font-weight: 700; padding: 11px 18px; border-radius: 12px; font-family: "Heebo", sans-serif; }
+  .cta:focus-visible, a:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+  .cta small { display: block; font-weight: 400; font-size: 12px; opacity: .9; direction: ltr; text-align: right; }
+
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 0 6px; }
+  .toc a { color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 600; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; }
+
+  section { padding: 28px 0 8px; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  section h2 { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+  .lede { color: var(--muted); margin: 0 0 14px; font-size: 15px; }
+  p { margin: 0 0 12px; max-width: 62ch; }
+  ul, ol { margin: 0 0 12px; padding-inline-start: 22px; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--brand); font-weight: 700; }
+  b { font-weight: 700; }
+  .btn { display: inline-block; font-family: "Heebo", sans-serif; font-weight: 700; font-size: 14px; background: var(--brand-soft); color: var(--brand-ink); border-radius: 8px; padding: 1px 9px; white-space: nowrap; }
+  .key { display: inline-block; font-weight: 700; background: var(--lock); border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; font-size: 15px; white-space: nowrap; }
+
+  /* step list for the login walkthrough (a real sequence) */
+  .steps { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px; }
+  .steps li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; margin: 0; }
+  .num { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--ink); color: var(--bg); font-weight: 900; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .steps li > div { padding-top: 4px; }
+
+  /* mock card: mirrors the real board card so Ron recognises it */
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 14px 14px 10px; margin: 6px 0 18px; box-shadow: 0 1px 2px rgba(15,23,42,.05); }
+  .card .head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+  .card .head b { font-family: "Heebo", sans-serif; font-size: 17px; }
+  .card .head span { color: var(--muted); font-size: 13px; }
+  .tier { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--muted); margin: 10px 0 4px; }
+  .task { display: flex; gap: 8px; align-items: center; padding: 6px 0; font-size: 15px; }
+  .task .box { width: 18px; height: 18px; border: 2px solid var(--line); border-radius: 5px; flex: none; }
+  .task .box.done { background: var(--brand); border-color: var(--brand); }
+  .task .by { font-size: 13px; font-weight: 700; }
+  .by.dani { color: var(--mgmt); } .by.ron { color: var(--brand); } .by.ori { color: var(--peer); }
+  .task.urgent { color: var(--urgent); font-weight: 700; }
+  .pill { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-inline-start: auto; }
+  .pill.open { background: var(--lock); color: var(--ink-2); }
+  .pill.prog { background: var(--high-soft); color: var(--high); }
+  .pill.done { background: var(--brand-soft); color: var(--brand-ink); }
+  .pill.drag { background: var(--urgent-soft); color: var(--urgent); }
+  .blur { filter: blur(5px); opacity: .55; user-select: none; }
+
+  .status { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 16px; }
+  .status div { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+  .status b { display: block; font-family: "Heebo", sans-serif; font-size: 16px; margin-bottom: 4px; }
+  .status .o b { color: var(--ink-2); } .status .p b { color: var(--high); } .status .d b { color: var(--brand); }
+  @media (max-width: 420px) { .status { grid-template-columns: 1fr; } }
+
+  .tablewrap { overflow-x: auto; margin: 4px 0 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: "Heebo", sans-serif; font-size: 13px; color: var(--muted); font-weight: 700; background: var(--lock); }
+  tr:last-child td { border-bottom: 0; }
+  .yes { color: var(--brand); font-weight: 700; } .no { color: var(--urgent); font-weight: 700; }
+
+  .prio { display: grid; gap: 8px; margin: 4px 0 16px; }
+  .prio div { border-radius: 12px; padding: 9px 12px; font-size: 15px; border: 1px solid var(--line); background: var(--paper); }
+  .prio .u { border-color: var(--urgent); background: var(--urgent-soft); color: var(--urgent); font-weight: 700; }
+  .prio .h { background: var(--high-soft); color: var(--high); font-weight: 700; }
+
+  .times { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 4px 0 16px; }
+  .times div { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px; text-align: center; }
+  .times b { display: block; font-family: "Heebo", sans-serif; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .times span { font-size: 13px; color: var(--muted); }
+
+  .note { background: var(--brand-soft); color: var(--brand-ink); border-radius: 12px; padding: 12px 14px; margin: 6px 0 14px; font-size: 15px; }
+  .warn { background: var(--high-soft); color: var(--high); border-radius: 12px; padding: 12px 14px; margin: 6px 0 14px; font-size: 15px; font-weight: 600; }
+
+  footer { color: var(--muted); font-size: 13px; padding-top: 24px; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="app-name"><span class="mark">✓</span> לו"ז יומי</div>
+    <h1>המדריך של רון</h1>
+    <p>כל מה שצריך כדי לעבוד עם הלו"ז מהטלפון: הכניסה, המשימות שלך, המשימות של אורי שפירא, הלידים והנסלקים.</p>
+    <a class="cta" href="https://fitness-daily-tasks.planet-kicker.workers.dev">פתיחת האפליקציה<small>fitness-daily-tasks.planet-kicker.workers.dev</small></a>
+  </header>
+
+  <nav class="toc" aria-label="תוכן">
+    <a href="#login">כניסה</a><a href="#board">הלוח</a><a href="#add">הוספת משימה</a><a href="#status">עדכון סטטוס</a><a href="#leads">לידים ונסלקים</a><a href="#alerts">תזכורות</a><a href="#rules">כללים</a>
+  </nav>
+
+  <section id="login">
+    <h2>כניסה בפעם הראשונה</h2>
+    <p class="lede">לוקח דקה. אחרי זה נשארים מחוברים 60 יום.</p>
+    <ol class="steps">
+      <li><span class="num">1</span><div>דני שולח לך בוואטסאפ <b>קישור כניסה אישי</b>. הקישור חד-פעמי ותקף 7 ימים. לוחצים עליו מהטלפון ונכנסים ישר ללוח.</div></li>
+      <li><span class="num">2</span><div><b>מוסיפים למסך הבית</b>, כדי שיהיה כמו אפליקציה. באייפון: כפתור שיתוף בספארי ← "הוסף למסך הבית". באנדרואיד: תפריט שלוש נקודות בכרום ← "הוסף למסך הבית".</div></li>
+      <li><span class="num">3</span><div>פותחים מהאייקון החדש ולוחצים <span class="btn">הפעל התראות</span> ומאשרים. בלי זה לא תקבל התראות על משימות חדשות.</div></li>
+    </ol>
+    <div class="note">בהמשך תוכל להיכנס גם בלי קישור: במסך הכניסה בוחרים את השם <b>רון וליצ'קו</b> ולוחצים <span class="btn">שלח לי קוד לוואטסאפ</span>. קוד בן 6 ספרות מגיע לוואטסאפ שלך ומקלידים אותו.</div>
+  </section>
+
+  <section id="board">
+    <h2>מה רואים בלוח</h2>
+    <p class="lede">כרטיס לכל איש צוות. אתה רואה במלואם רק את הכרטיס שלך ואת הכרטיס של אורי שפירא. שאר הכרטיסים מטושטשים.</p>
+    <div class="card" aria-label="דוגמה לכרטיס">
+      <div class="head"><b>רון וליצ'קו (אני)</b><span>היום</span></div>
+      <div class="tier">מההנהלה</div>
+      <div class="task urgent"><span class="box"></span>🚨 להוציא הצעת מחיר לדוד <span class="by dani">(דני ש.)</span><span class="pill open">פתוח</span></div>
+      <div class="task"><span class="box"></span>לסגור תוכנית אימונים לחודש <span class="by dani">(דני ש.)</span><span class="pill drag">נגררת 2 ימים</span></div>
+      <div class="tier">שלי</div>
+      <div class="task"><span class="box"></span>ביצוע לידים <span class="pill prog">בתהליך</span></div>
+      <div class="task"><span class="box done"></span>לעדכן מחירון <span class="pill done">הושלם</span></div>
+      <div class="tier">בקשות מאנשי צוות אחרים</div>
+      <div class="task"><span class="box"></span>לשלוח לי את הסרטון של האימון <span class="by ori">(אורי ח.)</span><span class="pill open">פתוח</span></div>
+    </div>
+    <ul>
+      <li><b>שלוש שכבות בכל כרטיס:</b> למעלה מה שדני או המנהל הישיר הוסיפו, באמצע מה שאיש הצוות הוסיף לעצמו, ולמטה בקשות מאנשי צוות אחרים.</li>
+      <li><b>שם בסוגריים</b> אחרי המשימה אומר מי הוסיף אותה. לכל אדם צבע קבוע.</li>
+      <li><b>🚨 דחוף</b> תמיד בראש הכרטיס, מודגש באדום.</li>
+      <li><b>"נגררת X ימים"</b>: משימה שלא הושלמה עוברת אוטומטית למחרת, עם ספירה של כמה ימים היא מחכה. משימות לא נעלמות לבד אף פעם.</li>
+      <li>החצים <span class="btn">יום קודם</span> / <span class="btn">יום הבא</span> מזיזים ימים. <span class="btn">היום</span> מחזיר להיום.</li>
+      <li>בתפריט למעלה יש גם <b>נסלקים</b>, <b>משימות קבועות</b> ו<b>יומן פעילות</b> (היסטוריה של כל שינוי).</li>
+    </ul>
+  </section>
+
+  <section id="add">
+    <h2>הוספת משימה</h2>
+    <p class="lede">לוחצים <span class="btn">הוספת משימה</span> בכרטיס.</p>
+    <ul>
+      <li><b>משימה</b>: כותרת קצרה, למשל "להתקשר ל-5 לידים חדשים".</li>
+      <li><b>פירוט</b>: מה בדיוק צריך לקרות.</li>
+      <li><b>תאריך יעד</b>: ברירת המחדל היום.</li>
+      <li><b>חשיבות</b>:</li>
+    </ul>
+    <div class="prio">
+      <div class="u">🚨 דחוף. לסיים כמה שיותר מהר. תמיד בראש הרשימה.</div>
+      <div class="h">⬆️ עדיפות גבוהה. לפני המשימות הרגילות.</div>
+      <div>רגיל. לפי הסדר הרגיל.</div>
+    </div>
+    <ul>
+      <li><b>למי</b>: <b>עצמי</b>, <b>אורי שפירא</b>, או <b>בקשה לאיש צוות אחר</b>. אפשר לבקש משימה מכל אחד בצוות גם בלי לראות את הלו"ז שלו. הבקשה נכנסת אצלו בשכבה התחתונה.</li>
+      <li><b>שלח הודעה מיידית</b>: סימון שיש רק למנהלים. איש הצוות מקבל התראה על המשימה ברגע השמירה, במקום בסיכום המרוכז.</li>
+      <li><b>משימה קבועה</b>: משימה שחוזרת בימים קבועים (למשל א׳–ה׳). אפשר להגדיר רק לעצמך או לאורי שפירא, מהעמוד <b>משימות קבועות</b>.</li>
+    </ul>
+  </section>
+
+  <section id="status">
+    <h2>עדכון סטטוס</h2>
+    <p class="lede">לוחצים על המשימה ובוחרים סטטוס.</p>
+    <div class="status">
+      <div class="o"><b>פתוח</b>עוד לא התחלת.</div>
+      <div class="p"><b>בתהליך</b>חובה לכתוב <b>מה בוצע ומה נשאר</b>. המשימה ממשיכה למחר.</div>
+      <div class="d"><b>הושלם</b>אפשר להוסיף הערת סיום ותמונה.</div>
+    </div>
+    <ul>
+      <li>בכל משימה יש <span class="btn">📷 צילום / העלאת תמונה</span>. שימושי להוכחת ביצוע, למשל צילום מסך של שיחה.</li>
+      <li>אפשר לעדכן את הפירוט של משימה בתהליך כמה פעמים ביום. הכל נשמר ב<b>היסטוריה</b> בתוך המשימה.</li>
+    </ul>
+    <h3 style="font-size:18px;margin:6px 0 8px">מי יכול לסמן "הושלם"</h3>
+    <div class="tablewrap">
+      <table>
+        <tr><th>המשימה</th><th>אתה</th><th>אורי שפירא</th></tr>
+        <tr><td>משימה שדני נתן לך</td><td class="no">רק דני</td><td>–</td></tr>
+        <tr><td>משימה שהוספת לעצמך</td><td class="yes">כן</td><td>–</td></tr>
+        <tr><td>ביצוע לידים ומשימות קבועות</td><td class="yes">כן</td><td class="yes">כן (על שלו)</td></tr>
+        <tr><td>משימה שאתה או דני נתתם לאורי שפירא</td><td class="yes">כן</td><td class="no">לא</td></tr>
+        <tr><td>משימה שאורי שפירא הוסיף לעצמו</td><td class="yes">כן</td><td class="yes">כן</td></tr>
+        <tr><td>בקשה מאיש צוות אחר אל אורי שפירא</td><td class="yes">כן</td><td class="no">לא</td></tr>
+      </table>
+    </div>
+    <p>הכלל בקצרה: משימה שקיבלת ממישהו אחר, רק המנהל סוגר. אתה מסמן "בתהליך" עם פירוט, ומי שנתן את המשימה מאשר ומסמן "הושלם".</p>
+  </section>
+
+  <section id="leads">
+    <h2>ביצוע לידים ונסלקים</h2>
+    <p class="lede">משימה קבועה שמופיעה אצלך ואצל אורי שפירא כל יום א׳–ו׳.</p>
+    <ul>
+      <li>פותחים את "ביצוע לידים" ומעדכנים <b>כמות שיחות</b> שביצעת היום.</li>
+      <li>על כל עסקה שנסגרה לוחצים על <b>+</b> ומוסיפים נסלק. חובה למלא את שלושת השדות: <b>שם מלא של הלקוח</b>, <b>סכום ₪</b> ו<b>אמצעי תשלום</b> (כרטיס אשראי, העברה בנקאית, הוראת קבע, הוראת קבע בנקאית, מזומן, קריפטו או פייפאל).</li>
+      <li>בסוף היום מסמנים "הושלם". במשימה הזאת לא צריך לכתוב פירוט ב"בתהליך".</li>
+      <li>העמוד <b>נסלקים</b> בתפריט מרכז את כל הנסלקים לפי טווח תאריכים, עם סה"כ. שם רואים גם את הנסלקים של אורי שפירא.</li>
+    </ul>
+  </section>
+
+  <section id="alerts">
+    <h2>תזכורות והתראות</h2>
+    <p class="lede">תזכורת יומית מגיעה בוואטסאפ למלא ולעדכן את הלו"ז:</p>
+    <div class="times">
+      <div><b>21:00</b><span>ראשון עד חמישי</span></div>
+      <div><b>14:00</b><span>שישי</span></div>
+      <div><b>19:00</b><span>שבת: להוסיף משימות לשבוע</span></div>
+    </div>
+    <ul>
+      <li><b>תזכורת למשימה:</b> בתוך המשימה לוחצים <span class="btn">הוספת תזכורת</span> ובוחרים תאריך ושעה. מהרגע הזה מגיעה תזכורת כל 30 דקות עד שהמשימה מסומנת "הושלם".</li>
+      <li><b>התראות בטלפון:</b> משימות חדשות ושינויים מגיעים בסיכום אחד מרוכז, לא הודעה על כל שינוי. משימה שסומנה "שלח הודעה מיידית" מגיעה מיד.</li>
+      <li>אם לא מגיעות התראות: לוודא שהאפליקציה נפתחת מהאייקון במסך הבית ושלחצת "הפעל התראות".</li>
+    </ul>
+  </section>
+
+  <section id="rules">
+    <h2>כללים קצרים</h2>
+    <ul>
+      <li><b>מחיקה</b> דורשת סיבה, והיא נשמרת ביומן הפעילות. אפשר למחוק רק משימות שאתה יצרת, או משימות שאורי שפירא הוסיף לעצמו.</li>
+      <li><b>שום דבר לא נעלם.</b> משימה פתוחה נגררת קדימה עד שנסגרת, וכל שינוי סטטוס נרשם עם שעה ושם.</li>
+      <li><b>עד סוף היום</b> כל משימה צריכה להיות "בתהליך" עם פירוט או "הושלם". זה מה שדני עובר עליו בסיכום היום.</li>
+      <li><b>אורי שפירא</b> רואה רק את הכרטיס שלו. מה שאתה רואה עליו זהה למה שדני רואה.</li>
+    </ul>
+    <div class="warn">הקישור לאתר ומספרי הטלפון של הצוות הם פנימיים. לא להעביר את קישור הכניסה האישי לאף אחד.</div>
+  </section>
+
+  <footer>לו"ז יומי · מדריך לרון וליצ'קו · עודכן 5.9.2026</footer>
+</div>

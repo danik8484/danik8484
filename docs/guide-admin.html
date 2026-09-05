@@ -1,0 +1,199 @@
+<title>מדריך מנהל ראשי לו"ז יומי</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Assistant:wght@400;600;700&display=swap">
+<style>
+  :root {
+    --bg: #f6f8f7; --paper: #ffffff; --ink: #0f172a; --ink-2: #334155; --muted: #64748b; --line: #dfe5e2;
+    --brand: #16a34a; --brand-soft: #dcfce7; --brand-ink: #14532d;
+    --urgent: #dc2626; --urgent-soft: #fee2e2; --high: #d97706; --high-soft: #fef3c7; --lock: #f1f5f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1220; --paper: #131c2e; --ink: #f1f5f9; --ink-2: #cbd5e1; --muted: #94a3b8; --line: #263247;
+      --brand: #4ade80; --brand-soft: #14361f; --brand-ink: #bbf7d0; --urgent: #f87171; --urgent-soft: #3b1515; --high: #fbbf24; --high-soft: #3a2a08; --lock: #1b2537;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1220; --paper: #131c2e; --ink: #f1f5f9; --ink-2: #cbd5e1; --muted: #94a3b8; --line: #263247;
+    --brand: #4ade80; --brand-soft: #14361f; --brand-ink: #bbf7d0; --urgent: #f87171; --urgent-soft: #3b1515; --high: #fbbf24; --high-soft: #3a2a08; --lock: #1b2537;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Assistant", "Heebo", system-ui, sans-serif; font-size: 17px; line-height: 1.6; direction: rtl; }
+  h1, h2, h3, .num, .app-name { font-family: "Heebo", "Assistant", system-ui, sans-serif; }
+  h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.25; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 18px 64px; }
+  header { padding: 28px 0 20px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .app-name { display: inline-flex; align-items: center; gap: 10px; font-weight: 900; font-size: 15px; color: var(--muted); }
+  .app-name .mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: #fff; font-weight: 900; }
+  header h1 { font-size: 34px; font-weight: 900; margin-top: 14px; }
+  header p { margin: 10px 0 0; color: var(--ink-2); max-width: 40ch; }
+  .cta { display: inline-block; margin-top: 16px; background: var(--brand); color: #fff; text-decoration: none; font-weight: 700; padding: 11px 18px; border-radius: 12px; font-family: "Heebo", sans-serif; }
+  .cta small { display: block; font-weight: 400; font-size: 12px; opacity: .9; direction: ltr; text-align: right; }
+  a:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 0 6px; }
+  .toc a { color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 600; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; }
+  section { padding: 28px 0 8px; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  section h2 { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+  section h3 { font-size: 18px; font-weight: 700; margin: 14px 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 14px; font-size: 15px; }
+  p { margin: 0 0 12px; max-width: 62ch; }
+  ul, ol { margin: 0 0 12px; padding-inline-start: 22px; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--brand); font-weight: 700; }
+  .btn { display: inline-block; font-family: "Heebo", sans-serif; font-weight: 700; font-size: 14px; background: var(--brand-soft); color: var(--brand-ink); border-radius: 8px; padding: 1px 9px; white-space: nowrap; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; direction: ltr; unicode-bidi: isolate; background: var(--lock); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; }
+  pre { background: var(--lock); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; overflow-x: auto; direction: ltr; text-align: left; font-size: 13.5px; line-height: 1.5; margin: 6px 0 14px; }
+  pre code { background: none; border: 0; padding: 0; }
+  .steps { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px; }
+  .steps li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; margin: 0; }
+  .num { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--ink); color: var(--bg); font-weight: 900; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .steps li > div { padding-top: 4px; }
+  .tablewrap { overflow-x: auto; margin: 4px 0 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: "Heebo", sans-serif; font-size: 13px; color: var(--muted); font-weight: 700; background: var(--lock); }
+  tr:last-child td { border-bottom: 0; }
+  .yes { color: var(--brand); font-weight: 700; } .no { color: var(--urgent); font-weight: 700; }
+  .note { background: var(--brand-soft); color: var(--brand-ink); border-radius: 12px; padding: 12px 14px; margin: 6px 0 14px; font-size: 15px; }
+  .warn { background: var(--high-soft); color: var(--high); border-radius: 12px; padding: 12px 14px; margin: 6px 0 14px; font-size: 15px; font-weight: 600; }
+  .todo { background: var(--urgent-soft); color: var(--urgent); border-radius: 12px; padding: 12px 14px; margin: 6px 0 14px; font-size: 15px; font-weight: 600; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 4px 0 16px; font-size: 15px; }
+  .kv dt { color: var(--muted); font-weight: 600; } .kv dd { margin: 0; }
+  footer { color: var(--muted); font-size: 13px; padding-top: 24px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="app-name"><span class="mark">✓</span> לו"ז יומי</div>
+    <h1>מדריך מנהל ראשי</h1>
+    <p>איפה הכל נמצא, איך מכניסים את הצוות, מה אתה יכול לעשות שאחרים לא, ומה עוד נשאר לחבר.</p>
+    <a class="cta" href="https://fitness-daily-tasks.planet-kicker.workers.dev">פתיחת האפליקציה<small>fitness-daily-tasks.planet-kicker.workers.dev</small></a>
+  </header>
+
+  <nav class="toc" aria-label="תוכן">
+    <a href="#where">איפה הכל</a><a href="#login">כניסה</a><a href="#team">הכנסת הצוות</a><a href="#settings">הגדרות</a><a href="#admin">מה רק אתה</a><a href="#daily">שגרה יומית</a><a href="#todo">מה נשאר</a><a href="#dev">להמשך פיתוח</a>
+  </nav>
+
+  <section id="where">
+    <h2>איפה הכל נמצא</h2>
+    <dl class="kv">
+      <dt>האפליקציה</dt><dd><a href="https://fitness-daily-tasks.planet-kicker.workers.dev">fitness-daily-tasks.planet-kicker.workers.dev</a></dd>
+      <dt>הקוד</dt><dd>GitHub: <span class="mono">danik8484/danik8484</span>, ענף <span class="mono">claude/hi-l4avs8</span>, תיקייה <span class="mono">web/</span></dd>
+      <dt>אירוח</dt><dd>Cloudflare Workers (חינם). Worker בשם <span class="mono">fitness-daily-tasks</span>. מסד נתונים D1, תמונות ב-KV.</dd>
+      <dt>עדכונים</dt><dd>כל דחיפה לענף עולה לאוויר לבד דרך GitHub Actions, כולל בדיקת תקינות בסוף.</dd>
+      <dt>גיבוי לעצמך</dt><dd>GitHub: <span class="mono">danik8484/dani-sync-locker</span>, תיקייה <span class="mono">לוז-יומי/</span>. שם גם המדריכים ומסמך המשך העבודה למחשב השני.</dd>
+    </dl>
+    <p>הפרטים הרגישים (טלגרם, וואטסאפ, שעות) נשמרים במסד הנתונים דרך מסך "הגדרות", לא בקוד. המאגר בגיטהאב ציבורי, אז שום סיסמה לא נמצאת בו.</p>
+  </section>
+
+  <section id="login">
+    <h2>הכניסה שלך</h2>
+    <ul>
+      <li>אתה מחובר עם קישור הכניסה שקיבלת. החיבור נשמר במכשיר 60 יום. מומלץ להוסיף למסך הבית ולהפעיל התראות.</li>
+      <li>רוצה להיכנס ממכשיר נוסף? מהמכשיר המחובר: <b>אנשי צוות</b> ← דני שקנבסקי ← <span class="btn">קישור כניסה</span>, ושלח לעצמך.</li>
+      <li>ננעלת מכל המכשירים? בקש מקלוד להריץ את ה-workflow "Admin login link" (דחיפה עם הסימון <span class="mono">[login-link]</span>). הוא מנפיק קישור חדש מוצפן, שרק קלוד באותו מחשב יכול לפתוח.</li>
+      <li>אחרי חיבור הוואטסאפ (סעיף הגדרות), כל אחד נכנס גם בלי קישור: בוחר את השם, מקבל קוד לוואטסאפ.</li>
+    </ul>
+  </section>
+
+  <section id="team">
+    <h2>הכנסת הצוות</h2>
+    <p class="lede">חמישה אנשי צוות כבר קיימים במערכת. חסרים רק הטלפונים והמיילים.</p>
+    <ol class="steps">
+      <li><span class="num">1</span><div>תפריט ← <b>אנשי צוות</b> ← לוחצים על השם ← ממלאים <b>טלפון נייד</b> ו<b>מייל</b> ← <span class="btn">שמירה</span>. הטלפון הוא המספר שאליו ילכו קודי הכניסה והתזכורות.</div></li>
+      <li><span class="num">2</span><div>לכל איש צוות: <span class="btn">קישור כניסה</span> ← <span class="btn">וואטסאפ</span>. נפתחת הודעה מוכנה עם הקישור. הקישור חד-פעמי, תקף שבוע.</div></li>
+      <li><span class="num">3</span><div>שולחים יחד עם מדריך השימוש (יש קובץ נפרד לרון; לשאר הצוות אותו מדריך מתאים, בלי החלק על אורי שפירא).</div></li>
+    </ol>
+    <div class="tablewrap">
+      <table>
+        <tr><th>שם</th><th>תפקיד</th><th>רואה</th></tr>
+        <tr><td>דני שקנבסקי</td><td>מנהל ראשי</td><td>את כולם</td></tr>
+        <tr><td>רון וליצ'קו</td><td>מנהל</td><td>את עצמו ואת אורי שפירא</td></tr>
+        <tr><td>אורי שפירא</td><td>איש צוות</td><td>את עצמו</td></tr>
+        <tr><td>דני קגנוביץ</td><td>איש צוות</td><td>את עצמו</td></tr>
+        <tr><td>אורי חסקל</td><td>איש צוות</td><td>את עצמו</td></tr>
+      </table>
+    </div>
+    <p>שינוי תפקיד או מנהל ישיר: באותו מסך, שדות <b>תפקיד</b> ו<b>מנהל ישיר</b>. איש צוות שעזב: <span class="btn">השהיה</span>. המשימות וההיסטוריה שלו נשארות.</p>
+  </section>
+
+  <section id="settings">
+    <h2>מסך הגדרות</h2>
+    <p class="lede">תפריט ← <b>הגדרות</b>. שלושה חלקים.</p>
+
+    <h3>1. טלגרם (הפיד שלך על כל שינוי)</h3>
+    <ol class="steps">
+      <li><span class="num">1</span><div>בטלגרם: חפש <b>@BotFather</b> ← <span class="mono">/newbot</span> ← תן שם ← העתק את ה-token.</div></li>
+      <li><span class="num">2</span><div>שלח הודעה כלשהי לבוט החדש (למשל "היי").</div></li>
+      <li><span class="num">3</span><div>בהגדרות: הדבק את ה-token ← <span class="btn">שמירת הגדרות</span> ← <span class="btn">זהה צ'אט</span> (ממלא לבד את ה-Chat ID) ← <span class="btn">שלח בדיקה</span>.</div></li>
+    </ol>
+    <p>מרגע זה כל הוספה, שינוי סטטוס, עריכה, מחיקה, תמונה, נסלק ותזכורת מגיעים אליך לטלגרם עם פירוט מלא ומי ביצע.</p>
+
+    <h3>2. וואטסאפ (מהקו העסקי של החברה)</h3>
+    <p>בוחרים מצב <b>גשר Baileys (הקו הקיים)</b> וממלאים שלושה שדות:</p>
+    <ul>
+      <li><b>כתובת הגשר (WA_HOST)</b>: הכתובת של שירות הגשר ב-Railway, מתחילה ב-https.</li>
+      <li><b>מזהה מכשיר</b>: <span class="mono">7107645253</span> (הקו העסקי).</li>
+      <li><b>טוקן</b>: הערך של <span class="mono">BIZ_TOK</span> או <span class="mono">BRIDGE_TOKEN</span> מ-Variables של השירות ב-Railway, או מהקובץ <span class="mono">.env</span> בתיקיית <span class="mono">thedani-baileys-bridge</span> במק.</li>
+    </ul>
+    <p><span class="btn">שמירת הגדרות</span> ← <span class="btn">שלח בדיקה לוואטסאפ שלי</span>. כשההודעה מגיעה, כל קודי הכניסה והתזכורות פעילים לכל הצוות.</p>
+
+    <h3>3. תזכורות יומיות</h3>
+    <p>שעה לכל יום בשבוע. ברירת המחדל: א׳–ה׳ 21:00, שישי 14:00, שבת 19:00 (הוספת משימות לשבוע). כפתור איפוס מחזיר לברירת המחדל.</p>
+  </section>
+
+  <section id="admin">
+    <h2>מה רק אתה יכול</h2>
+    <div class="tablewrap">
+      <table>
+        <tr><th>פעולה</th><th>אתה</th><th>רון</th><th>איש צוות</th></tr>
+        <tr><td>לראות את כל הכרטיסים</td><td class="yes">כן</td><td class="no">רק שלו ושל אורי שפירא</td><td class="no">רק שלו</td></tr>
+        <tr><td>לסמן "הושלם" על משימה שאתה נתת</td><td class="yes">כן</td><td class="no">לא</td><td class="no">לא</td></tr>
+        <tr><td>לסמן "הושלם" על משימה שמישהו קיבל</td><td class="yes">כן</td><td class="yes">רק אצל אורי שפירא</td><td class="no">לא</td></tr>
+        <tr><td>לפתוח מחדש משימה שסגרת</td><td class="yes">כן</td><td class="no">לא</td><td class="no">לא</td></tr>
+        <tr><td>לערוך או למחוק כל משימה</td><td class="yes">כן</td><td class="no">רק מה שהוא יצר או מה שאורי שפירא הוסיף לעצמו</td><td class="no">רק מה שהוא יצר</td></tr>
+        <tr><td>משימות קבועות לכולם</td><td class="yes">כן</td><td class="no">לעצמו ולאורי שפירא</td><td class="no">לעצמו</td></tr>
+        <tr><td>"שלח הודעה מיידית"</td><td class="yes">כן</td><td class="yes">כן</td><td class="no">לא</td></tr>
+        <tr><td>יומן פעילות</td><td class="yes">הכל</td><td class="yes">מה שהוא רואה</td><td class="no">לא</td></tr>
+        <tr><td>אנשי צוות, הגדרות</td><td class="yes">כן</td><td class="no">לא</td><td class="no">לא</td></tr>
+      </table>
+    </div>
+    <p>איש צוות יכול לסגור בעצמו רק משימות שהוסיף לעצמו ומשימות קבועות. כל השאר: הוא מסמן "בתהליך" עם פירוט, ואתה (או המנהל הישיר) מאשרים ב"הושלם".</p>
+  </section>
+
+  <section id="daily">
+    <h2>השגרה היומית שלך</h2>
+    <ul>
+      <li><b>בבוקר:</b> להוסיף משימות לאנשי הצוות. משימה דחופה שולחת הודעה מיידית לבד. משימות רגילות מגיעות להם בהודעה מרוכזת אחת אחרי כמה דקות.</li>
+      <li><b>במהלך היום:</b> הטלגרם מעדכן אותך על כל שינוי. אין צורך לפתוח את הלוח.</li>
+      <li><b>בערב:</b> אחרי התזכורת של 21:00, עוברים על הלוח. שורת <b>סיכום היום</b> מעל הכרטיסים מראה כמה הושלמו, בתהליך, פתוחות ונגררות. משימות בתהליך עם פירוט טוב מסמנים "הושלם"; מה שלא, נגרר למחר עם ספירה.</li>
+      <li><b>נסלקים:</b> העמוד <b>נסלקים</b> בתפריט מרכז את כל העסקאות של רון ואורי שפירא לפי טווח תאריכים, עם סה"כ כללי ולפי אמצעי תשלום.</li>
+      <li><b>שבת:</b> אחרי התזכורת של 19:00 כולם אמורים להוסיף את המשימות ההכרחיות לשבוע. ביום ראשון בבוקר בודקים שזה קרה.</li>
+    </ul>
+  </section>
+
+  <section id="todo">
+    <h2>מה עוד נשאר לחבר</h2>
+    <div class="todo">1. וואטסאפ: להכניס בהגדרות את כתובת הגשר והטוקן (סעיף הגדרות למעלה). בלי זה אין קודי כניסה בוואטסאפ ואין תזכורות, ורק קישורי כניסה עובדים.</div>
+    <div class="todo">2. טלגרם: ליצור בוט ולהדביק את ה-token בהגדרות.</div>
+    <div class="todo">3. אנשי צוות: להכניס טלפון ומייל לכל אחד ולשלוח קישורי כניסה.</div>
+    <div class="todo">4. DND CASH: לחבר את הנסלקים למערכת DND CASH. הנקודות בקוד מסומנות <span class="mono">TODO(DND CASH)</span>.</div>
+    <div class="warn">5. אבטחה: מפתח ה-API של Cloudflare הודבק בצ'אט במהלך ההקמה. מומלץ להחליף אותו: Cloudflare ← My Profile ← API Tokens ← Roll, ואז לעדכן את הסוד <span class="mono">CFTOKEN</span> בגיטהאב (Settings ← Secrets and variables ← Actions).</div>
+  </section>
+
+  <section id="dev">
+    <h2>להמשך עבודה במחשב השני</h2>
+    <p>הכל בענן. במחשב השני פותחים קלוד ואומרים לו:</p>
+    <div class="note">"תוריד מהענן את לוז-יומי מ-dani-sync-locker ותקרא את README.md שם. זה מסמך ההמשך עם כל מה שנבנה ומה נשאר."</div>
+    <p>או ישירות מהקוד החי:</p>
+    <pre><code>git clone -b claude/hi-l4avs8 https://github.com/danik8484/danik8484
+cd danik8484/web
+npm install
+npm run start      # בונה ומריץ מקומית על http://localhost:8787
+npm run test:e2e   # 22 בדיקות אוטומטיות</code></pre>
+    <p>כל שינוי שנדחף לענף <span class="mono">claude/hi-l4avs8</span> עולה לאוויר לבד תוך כשתי דקות. הבדיקות רצות לפני הפריסה, ופריסה שנכשלת לא מחליפה את הגרסה החיה.</p>
+  </section>
+
+  <footer>לו"ז יומי · מדריך מנהל ראשי · עודכן 5.9.2026</footer>
+</div>
