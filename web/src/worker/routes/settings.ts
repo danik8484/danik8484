@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../context";
 import { getSettings, saveSettings, mask, DEFAULT_REMINDERS } from "../settings";
 import { sendTelegram, telegramConfigured, telegramRecentChats, TELEGRAM_TOKEN_RE, TELEGRAM_CHAT_RE } from "../telegram";
-import { sendWhatsApp, whatsappConfigured, WA_PHONE_ID_RE } from "../whatsapp";
+import { sendWhatsApp, whatsappConfigured, WA_PHONE_ID_RE, BRIDGE_HOST_RE, bridgeConfigured, metaConfigured } from "../whatsapp";
 import { readJson, str, phone as parsePhone } from "../validate";
 import type { AppSettings } from "@shared/types";
 
@@ -18,8 +18,11 @@ function forClient(s: AppSettings) {
     ...s,
     telegramBotToken: mask(s.telegramBotToken),
     whatsappToken: mask(s.whatsappToken),
+    bridgeToken: mask(s.bridgeToken),
     telegramConfigured: telegramConfigured(s),
     whatsappConfigured: whatsappConfigured(s),
+    bridgeConfigured: bridgeConfigured(s),
+    metaConfigured: metaConfigured(s),
   };
 }
 
@@ -37,6 +40,23 @@ settingsRoutes.put("/", async (c) => {
   next.telegramBotToken = secret(body.telegramBotToken, current.telegramBotToken);
   if (next.telegramBotToken && !TELEGRAM_TOKEN_RE.test(next.telegramBotToken)) return c.json({ error: "ה-token של הבוט לא נראה תקין (פורמט 123456789:AA...)" }, 400);
   next.whatsappToken = secret(body.whatsappToken, current.whatsappToken);
+  next.bridgeToken = secret(body.bridgeToken, current.bridgeToken);
+  if (body.whatsappMode !== undefined) {
+    if (body.whatsappMode !== "bridge" && body.whatsappMode !== "meta") return c.json({ error: "מצב וואטסאפ לא תקין" }, 400);
+    next.whatsappMode = body.whatsappMode;
+  }
+  if (body.bridgeHost !== undefined) {
+    const host = str(body.bridgeHost, 200, { required: false });
+    if (host === null) return c.json({ error: "כתובת הגשר ארוכה מדי" }, 400);
+    const trimmed = host.replace(/\/+$/, "");
+    if (trimmed && !BRIDGE_HOST_RE.test(trimmed)) return c.json({ error: "כתובת הגשר חייבת להיות https://... בלי נתיב" }, 400);
+    next.bridgeHost = trimmed;
+  }
+  if (body.bridgeInstanceId !== undefined) {
+    const id = str(body.bridgeInstanceId, 30, { required: false });
+    if (id === null || (id && !/^\d{3,30}$/.test(id))) return c.json({ error: "מספר ה-instance חייב להיות ספרות בלבד" }, 400);
+    next.bridgeInstanceId = id;
+  }
   if (next.whatsappToken && !/^[A-Za-z0-9_.-]{20,600}$/.test(next.whatsappToken)) return c.json({ error: "ה-Access token של וואטסאפ לא נראה תקין" }, 400);
   for (const k of ["telegramChatId", "whatsappPhoneId", "whatsappTemplate", "whatsappLoginTemplate", "whatsappLang"] as const) {
     if (body[k] !== undefined) {

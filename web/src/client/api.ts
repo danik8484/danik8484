@@ -1,6 +1,6 @@
 import type { AppSettings, Attachment, AuthConfig, BoardResponse, Deal, DealsResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskPriority, TaskStatus } from "@shared/types";
 
-export type ClientSettings = AppSettings & { telegramConfigured: boolean; whatsappConfigured: boolean };
+export type ClientSettings = AppSettings & { telegramConfigured: boolean; whatsappConfigured: boolean; bridgeConfigured: boolean; metaConfigured: boolean };
 
 export class ApiError extends Error {
   status: number;

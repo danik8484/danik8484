@@ -32,14 +32,16 @@ authRoutes.post("/request-code", async (c) => {
     const issued = await issueCode(db, `user:${user.id}`, dev ? null : (c.req.header("cf-connecting-ip") ?? null), dev ? 0 : undefined);
     if (!issued.ok) return c.json({ error: issued.error }, issued.status as 429);
     const s = await getSettings(db, c.env);
-    if (user.phone && whatsappConfigured(s)) {
+    if (dev) {
+      // Local development: the code is shown on screen, nothing is sent.
+    } else if (user.phone && whatsappConfigured(s)) {
       try {
         await sendWhatsAppCode(s, user.phone, issued.code);
       } catch (e) {
         console.error("whatsapp code failed", e);
         return c.json({ error: "שליחת הקוד לוואטסאפ נכשלה. נסה שוב או בקש מהמנהל קישור כניסה." }, 502);
       }
-    } else if (c.env.APP_ENV !== "development") {
+    } else {
       return c.json({ error: "אי אפשר לשלוח קוד לוואטסאפ כרגע. בקש מהמנהל קישור כניסה." }, 503);
     }
     const masked = user.phone ? `•••${user.phone.slice(-4)}` : "";

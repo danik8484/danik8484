@@ -156,6 +156,21 @@ test("settings are admin-only, validated, and daily reminder times default to 21
   // Clear
   expect((await request.put("/api/settings", { data: { telegramBotToken: "-", telegramChatId: "" } })).status()).toBe(200);
   expect((await (await request.get("/api/settings")).json()).telegramConfigured).toBe(false);
+  // WhatsApp through the company's Baileys bridge (Green API format)
+  expect((await request.put("/api/settings", { data: { whatsappMode: "bridge", bridgeHost: "http://insecure.example", bridgeInstanceId: "1", bridgeToken: "x" } })).status()).toBe(400);
+  expect((await request.put("/api/settings", { data: { whatsappMode: "bridge", bridgeHost: "https://wa-bridge.up.railway.app/", bridgeInstanceId: "7107645253", bridgeToken: "bridge-secret-token-1" } })).status()).toBe(200);
+  const s4 = await (await request.get("/api/settings")).json();
+  expect(s4.whatsappMode).toBe("bridge");
+  expect(s4.bridgeHost).toBe("https://wa-bridge.up.railway.app");
+  expect(s4.bridgeConfigured).toBe(true);
+  expect(s4.whatsappConfigured).toBe(true);
+  expect(s4.bridgeToken).toMatch(/^brid••••/);
+  // In development the login code is shown on screen and nothing is sent to the bridge
+  const rc = await request.post("/api/auth/request-code", { data: { userId: 5 } });
+  expect(rc.status()).toBe(200);
+  expect((await rc.json()).devCode).toMatch(/^\d{6}$/);
+  expect((await request.put("/api/settings", { data: { bridgeToken: "-", bridgeHost: "", bridgeInstanceId: "" } })).status()).toBe(200);
+  expect((await (await request.get("/api/settings")).json()).whatsappConfigured).toBe(false);
   await request.post("/api/settings/reset-reminders");
   expect((await (await request.get("/api/settings")).json()).reminderTimes[0]).toBe("21:00");
   // Forced cron in dev sends the day-end reminder path without crashing

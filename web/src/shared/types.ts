@@ -149,6 +149,11 @@ export interface AppSettings {
   telegramBotToken: string;
   telegramChatId: string;
   telegramNotifyOwnActions: boolean;
+  /** "bridge": the company's own Baileys bridge (Green-API-compatible HTTP). "meta": WhatsApp Business Cloud API. */
+  whatsappMode: "bridge" | "meta";
+  bridgeHost: string; // e.g. https://wa-bridge.up.railway.app
+  bridgeInstanceId: string; // waInstance id, e.g. 7107645253
+  bridgeToken: string;
   whatsappToken: string;
   whatsappPhoneId: string;
   whatsappTemplate: string; // utility template with one {{1}} body parameter

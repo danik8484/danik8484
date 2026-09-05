@@ -11,6 +11,10 @@ export default function Settings() {
   const [tgToken, setTgToken] = useState("");
   const [tgChat, setTgChat] = useState("");
   const [tgOwn, setTgOwn] = useState(false);
+  const [waMode, setWaMode] = useState<"bridge" | "meta">("bridge");
+  const [brHost, setBrHost] = useState("");
+  const [brId, setBrId] = useState("");
+  const [brToken, setBrToken] = useState("");
   const [waToken, setWaToken] = useState("");
   const [waPhoneId, setWaPhoneId] = useState("");
   const [waTemplate, setWaTemplate] = useState("");
@@ -25,6 +29,10 @@ export default function Settings() {
       setS(data);
       setTgChat(data.telegramChatId);
       setTgOwn(data.telegramNotifyOwnActions);
+      setWaMode(data.whatsappMode);
+      setBrHost(data.bridgeHost);
+      setBrId(data.bridgeInstanceId);
+      setBrToken("");
       setWaPhoneId(data.whatsappPhoneId);
       setWaTemplate(data.whatsappTemplate);
       setWaLoginTemplate(data.whatsappLoginTemplate);
@@ -61,6 +69,10 @@ export default function Settings() {
         telegramBotToken: tgToken,
         telegramChatId: tgChat,
         telegramNotifyOwnActions: tgOwn,
+        whatsappMode: waMode,
+        bridgeHost: brHost,
+        bridgeInstanceId: brId,
+        bridgeToken: brToken,
         whatsappToken: waToken,
         whatsappPhoneId: waPhoneId,
         whatsappTemplate: waTemplate,
@@ -125,12 +137,44 @@ export default function Settings() {
 
       <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-base font-bold text-ink-900">
-          וואטסאפ (WhatsApp Business API){" "}
+          וואטסאפ{" "}
           <span className={`ms-2 rounded-full px-2 py-0.5 text-xs ${s.whatsappConfigured ? "bg-brand-100 text-brand-700" : "bg-slate-100 text-slate-600"}`}>{s.whatsappConfigured ? "מחובר" : "לא מחובר"}</span>
         </h2>
-        <p className="text-xs text-slate-600">
-          ההודעות (קודי כניסה, משימות חדשות, תזכורות) נשלחות מהמספר העסקי למספר הפרטי של כל איש צוות. ההוראות המלאות להקמה נמצאות בקובץ README של המערכת.
-        </p>
+        <p className="text-xs text-slate-600">קודי כניסה, משימות חדשות ותזכורות נשלחות מהקו של החברה למספר הפרטי של כל איש צוות.</p>
+        <div className="grid grid-cols-2 gap-1.5" role="radiogroup" data-testid="wa-mode">
+          {(["bridge", "meta"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={waMode === m}
+              onClick={() => setWaMode(m)}
+              className={`rounded-lg border px-2 py-2 text-sm font-semibold ${waMode === m ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-ink-700"}`}
+            >
+              {m === "bridge" ? "גשר Baileys (הקו הקיים)" : "WhatsApp Business API"}
+            </button>
+          ))}
+        </div>
+        {waMode === "bridge" ? (
+          <>
+            <p className="text-xs text-slate-600">
+              אותו גשר שמשמש את בוט AutoFit. הערכים נמצאים ב-Railway במשתני הסביבה של הבוט: <b dir="ltr">WA_HOST</b> (כתובת הגשר), <b dir="ltr">GREEN_API_ID_BIZ</b> (מספר ה-instance של הקו העסקי) ו-<b dir="ltr">BRIDGE_TOKEN</b>. לקו הראשי: <b dir="ltr">MAIN_WA_HOST</b>, <b dir="ltr">GREEN_API_ID</b>, <b dir="ltr">MAIN_BRIDGE_TOKEN</b>.
+            </p>
+            <Field label="כתובת הגשר (WA_HOST)">
+              <input dir="ltr" className={inputCls} value={brHost} onChange={(e) => setBrHost(e.target.value)} placeholder="https://....up.railway.app" data-testid="bridge-host" />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Instance ID">
+                <input dir="ltr" className={inputCls} value={brId} onChange={(e) => setBrId(e.target.value)} placeholder="7107645253" data-testid="bridge-id" />
+              </Field>
+              <Field label="Token (BRIDGE_TOKEN)" hint={s.bridgeToken ? `שמור: ${s.bridgeToken}. השאר ריק כדי לא לשנות, או "-" למחיקה.` : undefined}>
+                <input dir="ltr" className={inputCls} value={brToken} onChange={(e) => setBrToken(e.target.value)} autoComplete="off" data-testid="bridge-token" />
+              </Field>
+            </div>
+          </>
+        ) : (
+          <>
+        <p className="text-xs text-slate-600">WhatsApp Business Cloud API של Meta, עם תבניות מאושרות. ההוראות המלאות להקמה נמצאות בקובץ README של המערכת.</p>
         <Field label="Access token" hint={s.whatsappToken ? `שמור: ${s.whatsappToken}. השאר ריק כדי לא לשנות, או "-" למחיקה.` : undefined}>
           <input dir="ltr" className={inputCls} value={waToken} onChange={(e) => setWaToken(e.target.value)} autoComplete="off" />
         </Field>
@@ -148,6 +192,8 @@ export default function Settings() {
             <input dir="ltr" className={inputCls} value={waLang} onChange={(e) => setWaLang(e.target.value)} />
           </Field>
         </div>
+          </>
+        )}
         <Button type="button" variant="secondary" disabled={busy || !s.whatsappConfigured} onClick={() => run("נשלחה הודעת בדיקה לוואטסאפ שלך", () => api.whatsappTest())}>
           שלח בדיקה לוואטסאפ שלי
         </Button>
