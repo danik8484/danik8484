@@ -1,0 +1,51 @@
+name: Admin login link
+
+# Creates a one-time sign-in link for the admin (user 1) on the live database and prints it
+# ENCRYPTED with .github/deploy-pubkey.pem (this repository is public). Triggered by a commit
+# whose message contains [login-link].
+on:
+  push:
+    branches: ["claude/hi-l4avs8"]
+
+jobs:
+  link:
+    if: contains(github.event.head_commit.message, '[login-link]')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_API_TOKEN || secrets.CFTOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Pick the Cloudflare account
+        id: account
+        run: |
+          set -euo pipefail
+          accounts=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50" | python3 -c 'import sys,json; print(" ".join(a["id"] for a in json.load(sys.stdin)["result"]))')
+          chosen=""
+          for id in $accounts; do
+            if curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$id/workers/scripts" | python3 -c 'import sys,json; sys.exit(0 if any(s["id"]=="fitness-daily-tasks" for s in json.load(sys.stdin).get("result",[])) else 1)'; then chosen=$id; break; fi
+          done
+          [ -n "$chosen" ] || { echo "worker not found"; exit 1; }
+          echo "account_id=$chosen" >> "$GITHUB_OUTPUT"
+      - name: Create the link
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.account.outputs.account_id }}
+        run: |
+          set -euo pipefail
+          TOKEN=$(openssl rand -hex 32); echo "::add-mask::$TOKEN"
+          HASH=$(printf 'link:%s' "$TOKEN" | sha256sum | cut -d' ' -f1)
+          NOW=$(date +%s000); EXP=$((NOW + 7*24*60*60*1000))
+          npx wrangler d1 execute fitness-daily-tasks --remote --command "INSERT INTO login_links (token_hash, user_id, created_by_id, expires_at, created_at) VALUES ('$HASH', 1, NULL, $EXP, $NOW);" > out.txt 2>&1 || { sed -E 's#https?://[^ ]+#<url>#g' out.txt; exit 1; }
+          printf '{"loginLink":"https://fitness-daily-tasks.planet-kicker.workers.dev/login?t=%s"}\n' "$TOKEN" > payload.json
+          openssl rand -hex 32 > aes.key
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in payload.json -out payload.enc -pass file:aes.key
+          openssl pkeyutl -encrypt -pubin -inkey ../.github/deploy-pubkey.pem -in aes.key -out aes.key.enc
+          echo "===KEY==="; base64 -w0 aes.key.enc; echo; echo "===PAYLOAD==="; base64 -w0 payload.enc; echo; echo "===END==="
