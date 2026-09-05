@@ -22,6 +22,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   admin: "מנהל ראשי",
   manager: "מנהל",
   employee: "איש צוות",
+  coordinator: "רכז",
 };
 
 export const WEEKDAYS_SHORT = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];

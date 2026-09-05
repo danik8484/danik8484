@@ -1,4 +1,5 @@
-export type Role = "admin" | "manager" | "employee";
+/** coordinator = "רכז": sees every board except the admin's and adds tasks to anyone, but manages nobody and cannot be assigned tasks. */
+export type Role = "admin" | "manager" | "employee" | "coordinator";
 export type TaskStatus = "open" | "in_progress" | "done";
 export type TaskKind = "normal" | "leads";
 export type TaskPriority = "urgent" | "high" | "normal";

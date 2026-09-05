@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Field, inputCls } from "./ui";
 import { PRIORITY_HINT, PRIORITY_LABEL, WEEKDAYS_SHORT } from "../format";
+import { canManage, isCoordinator } from "@shared/permissions";
 
 interface Props {
   defaultAssigneeId: number;
@@ -16,7 +17,8 @@ interface Props {
 
 export default function TaskForm({ defaultAssigneeId, defaultDate, existing, forceRecurring = false, onSaved, onCancel }: Props) {
   const s = useSession();
-  const allActive = s.users.filter((u) => u.active);
+  // Nobody assigns a task to a coordinator: they have no board.
+  const allActive = s.users.filter((u) => u.active && !isCoordinator(u));
   const managed = allActive.filter((u) => s.canSee(u.id));
   const others = allActive.filter((u) => !s.canSee(u.id));
   const [title, setTitle] = useState(existing?.title ?? "");
@@ -28,7 +30,9 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
   const [leads, setLeads] = useState(false);
   const [priority, setPriority] = useState<TaskPriority>(existing?.priority ?? "normal");
   const [notifyNow, setNotifyNow] = useState(false);
-  const isManager = s.user.role !== "employee";
+  const isManager = s.user.role !== "employee" && !isCoordinator(s.user);
+  // Recurring tasks are for people whose board you manage (a coordinator manages nobody).
+  const canRecur = canManage(s.user, assigneeId, s.users);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -147,12 +151,12 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
               type="checkbox"
               className="size-4 accent-brand-600"
               checked={recurring}
-              disabled={forceRecurring || !s.canSee(assigneeId)}
+              disabled={forceRecurring || !canRecur}
               onChange={(e) => setRecurring(e.target.checked)}
             />
             משימה קבועה (חוזרת כל שבוע)
           </label>
-          {!s.canSee(assigneeId) && <p className="mt-1 text-xs text-slate-500">משימה קבועה אפשר להגדיר רק לעצמך או לאנשי צוות שאתה מנהל.</p>}
+          {!canRecur && <p className="mt-1 text-xs text-slate-500">משימה קבועה אפשר להגדיר רק לעצמך או לאנשי צוות שאתה מנהל.</p>}
           {recurring && (
             <label className="mt-3 flex items-center gap-2 text-sm text-ink-700">
               <input type="checkbox" className="size-4 accent-brand-600" checked={leads} onChange={(e) => setLeads(e.target.checked)} />

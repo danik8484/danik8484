@@ -9,7 +9,7 @@ import { fmtWeekdaysHe } from "../dates";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
-import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, noteRequiredForInProgress } from "@shared/permissions";
+import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, canSeeActivityLog, canSeeDealsAndRecurring, isCoordinator, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type BoardResponse, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
 import { parseDeals } from "../serialize";
@@ -129,7 +129,7 @@ taskRoutes.post("/", async (c) => {
     .get();
   await db.insert(taskEvents).values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open", note: priority !== "normal" ? PRIORITY_NOTE[priority] : "" }).run();
   // Managers may send the full task right now instead of waiting for the batched digest.
-  const notifyNow = body.notifyNow === true && me.role !== "employee" && assigneeId !== me.id;
+  const notifyNow = body.notifyNow === true && me.role !== "employee" && !isCoordinator(me) && assigneeId !== me.id;
   if (notifyNow) {
     // Send right away; if the person has no device and no WhatsApp, fall back to the batched digest so nothing is lost.
     c.executionCtx.waitUntil(
@@ -172,6 +172,8 @@ taskRoutes.post("/:id/status", async (c) => {
   if (!row) return c.json({ error: "לא נמצא" }, 404);
   const mePublic = toPublicUser(me, false);
   if (!canManage(mePublic, row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  // A coordinator has no board: a task that somehow points at one cannot be worked on, only moved or deleted.
+  if (c.get("teamPublic").some((u) => u.id === row.assigneeId && isCoordinator(u))) return c.json({ error: "לרכז אין לו\"ז. העבר את המשימה לאיש צוות אחר" }, 400);
   if (status !== row.status && !canChangeStatus(mePublic, row, status, c.get("teamPublic"))) {
     return c.json(
       { error: row.status === "done" ? "רק המנהל יכול לפתוח מחדש משימה שסומנה כהושלמה." : "רק המנהל יכול לסמן 'הושלם' על משימה שניתנה על ידי מישהו אחר. סמן 'בתהליך' וכתוב מה בוצע." },
@@ -345,6 +347,8 @@ taskRoutes.patch("/:id", async (c) => {
       // Only a *new* assignee must be active; editing a task whose assignee was deactivated stays possible.
       if (!canAssignTask(assigneeId, teamPublic)) return c.json({ error: "איש צוות לא תקין" }, 400);
       if (row.recurringId) return c.json({ error: "משימה קבועה אי אפשר להעביר לאיש צוות אחר" }, 400);
+      // A coordinator manages nobody, so moving a task would silently drop a reminder a manager set on it.
+      if (row.reminderAt && isCoordinator(me)) return c.json({ error: "על המשימה יש תזכורת. רק המנהל של איש הצוות יכול להעביר אותה" }, 403);
       patch.assigneeId = assigneeId;
       reassignedTo = assigneeId;
       // A reminder follows the task only when the editor manages the new assignee's card.
@@ -398,6 +402,7 @@ export const dealRoutes = new Hono<AppEnv>();
 dealRoutes.get("/", async (c) => {
   const db = c.get("db");
   const me = c.get("user");
+  if (!canSeeDealsAndRecurring(me)) return c.json({ error: "אין הרשאה" }, 403);
   const visible = visibleIdsFor(me, c.get("team"));
   const today = localDate(c.env.TIMEZONE);
   const from = isIsoDate(c.req.query("from")) ? (c.req.query("from") as string) : today.slice(0, 8) + "01";
@@ -431,7 +436,7 @@ export const logRoutes = new Hono<AppEnv>();
 logRoutes.get("/", async (c) => {
   const db = c.get("db");
   const me = c.get("user");
-  if (me.role === "employee") return c.json({ error: "אין הרשאה" }, 403);
+  if (!canSeeActivityLog(toPublicUser(me, false))) return c.json({ error: "אין הרשאה" }, 403);
   const visible = visibleIdsFor(me, c.get("team"));
   const from = isIsoDate(c.req.query("from")) ? (c.req.query("from") as string) : localDate(c.env.TIMEZONE, new Date(Date.now() - 7 * 86400000));
   const to = isIsoDate(c.req.query("to")) ? (c.req.query("to") as string) : localDate(c.env.TIMEZONE);

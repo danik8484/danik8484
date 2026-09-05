@@ -8,7 +8,7 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   email: text("email").unique(),
   phone: text("phone"),
-  role: text("role", { enum: ["admin", "manager", "employee"] }).notNull(),
+  role: text("role", { enum: ["admin", "manager", "employee", "coordinator"] }).notNull(),
   managerId: integer("manager_id"),
   sortOrder: integer("sort_order").notNull().default(0),
   active: integer("active").notNull().default(1),

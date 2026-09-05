@@ -96,12 +96,13 @@ export async function flushDigests(env: Env, db: Db, appUrl: string, now = Date.
     }
     if (claimedCount === 0) continue;
     const taskIds = [...new Set(items.map((i) => i.taskId))];
-    const rows: { id: number; title: string; priority: TaskPriority }[] = [];
+    const rows: { id: number; title: string; priority: TaskPriority; assigneeId: number }[] = [];
     for (const ids of chunk(taskIds)) {
-      rows.push(...(await db.select({ id: tasks.id, title: tasks.title, priority: tasks.priority }).from(tasks).where(and(inArray(tasks.id, ids), isNull(tasks.deletedAt))).all()));
+      rows.push(...(await db.select({ id: tasks.id, title: tasks.title, priority: tasks.priority, assigneeId: tasks.assigneeId }).from(tasks).where(and(inArray(tasks.id, ids), isNull(tasks.deletedAt))).all()));
     }
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const live = items.filter((i) => byId.has(i.taskId));
+    // Only tasks that still belong to this person: a task moved elsewhere in the meantime is no longer theirs to hear about.
+    const live = items.filter((i) => byId.get(i.taskId)?.assigneeId === userId);
     const recipientActive = team.find((u) => u.id === userId)?.active === 1;
     if (live.length > 0 && recipientActive) {
       const actors = [...new Set(live.map((i) => i.actorId))].map((id) => shortName(team.find((u) => u.id === id)?.name ?? "", team, id));
@@ -150,7 +151,7 @@ export async function sendDayEndReminders(env: Env, db: Db, appUrl: string, now 
   const candidates = await db
     .select()
     .from(users)
-    .where(and(eq(users.active, 1), or(isNull(users.reminderSentDate), ne(users.reminderSentDate, today))))
+    .where(and(eq(users.active, 1), ne(users.role, "coordinator"), or(isNull(users.reminderSentDate), ne(users.reminderSentDate, today))))
     .all();
   let sent = 0;
   for (const u of candidates) {

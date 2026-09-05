@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { AppEnv } from "../context";
-import { users, sessions, pushSubscriptions, notificationQueue } from "../db/schema";
+import { users, sessions, pushSubscriptions, notificationQueue, tasks, recurringTasks } from "../db/schema";
 import { and, isNull } from "drizzle-orm";
 import { materializeRecurring } from "../recurring";
 import { localDate } from "../dates";
@@ -12,7 +12,7 @@ import type { Role } from "@shared/types";
 
 export const userRoutes = new Hono<AppEnv>();
 
-const ROLES: Role[] = ["admin", "manager", "employee"];
+const ROLES: Role[] = ["admin", "manager", "employee", "coordinator"];
 
 userRoutes.use("*", async (c, next) => {
   if (c.get("user").role !== "admin") return c.json({ error: "רק מנהל ראשי יכול לנהל אנשי צוות" }, 403);
@@ -24,12 +24,13 @@ userRoutes.get("/", async (c) => {
 });
 
 function validateManager(role: Role, managerId: number | null, team: { id: number; role: string; active: number }[], selfId: number | null): string | null {
-  if (role === "admin") return null;
+  // The admin and a coordinator report to nobody.
+  if (role === "admin" || role === "coordinator") return null;
   if (managerId === null) return "חובה לבחור מנהל";
   if (managerId === selfId) return "איש צוות לא יכול להיות מנהל של עצמו";
   const m = team.find((u) => u.id === managerId);
   if (!m || m.active !== 1) return "מנהל לא תקין";
-  if (m.role === "employee") return "מנהל חייב להיות בתפקיד מנהל או מנהל ראשי";
+  if (m.role === "employee" || m.role === "coordinator") return "מנהל חייב להיות בתפקיד מנהל או מנהל ראשי";
   return null;
 }
 
@@ -52,7 +53,7 @@ userRoutes.post("/", async (c) => {
   const maxSort = Math.max(0, ...team.map((u) => u.sortOrder));
   const row = await db
     .insert(users)
-    .values({ name, email, phone: phone ?? null, role, managerId: role === "admin" ? null : managerId, sortOrder: maxSort + 1 })
+    .values({ name, email, phone: phone ?? null, role, managerId: role === "admin" || role === "coordinator" ? null : managerId, sortOrder: maxSort + 1 })
     .returning()
     .get();
   return c.json({ ok: true, user: toPublicUser(row, true) }, 201);
@@ -92,15 +93,24 @@ userRoutes.patch("/:id", async (c) => {
   if (!ROLES.includes(role)) return c.json({ error: "תפקיד לא תקין" }, 400);
   if (id === me.id && role !== "admin") return c.json({ error: "לא ניתן לשנות את התפקיד של עצמך" }, 400);
   const managerId = body.managerId !== undefined ? (body.managerId === null || body.managerId === "" ? null : int(body.managerId)) : row.managerId;
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "coordinator") {
     const err = validateManager(role, managerId, team, id);
     if (err) return c.json({ error: err }, 400);
   }
   patch.role = role;
-  patch.managerId = role === "admin" ? null : managerId;
+  patch.managerId = role === "admin" || role === "coordinator" ? null : managerId;
   const reports = team.filter((u) => u.managerId === id && u.active === 1 && u.id !== id);
-  if (role === "employee" && reports.length > 0) {
-    return c.json({ error: `לא ניתן להפוך לאיש צוות: ${reports.map((u) => u.name).join(", ")} עדיין תחת ניהולו. קודם העבר אותם למנהל אחר.` }, 400);
+  if ((role === "employee" || role === "coordinator") && reports.length > 0) {
+    return c.json({ error: `לא ניתן להפוך ל${role === "coordinator" ? "רכז" : "איש צוות"}: ${reports.map((u) => u.name).join(", ")} עדיין תחת ניהולו. קודם העבר אותם למנהל אחר.` }, 400);
+  }
+  if (role === "coordinator" && row.role !== "coordinator") {
+    // A coordinator has no board, so nothing may point at them: no task of any status (a finished one could be reopened)
+    // and no recurring template (a paused one could be resumed). Tasks never disappear: move or delete them first.
+    const own = await db.select({ n: sql<number>`count(*)` }).from(tasks).where(and(eq(tasks.assigneeId, id), isNull(tasks.deletedAt))).get();
+    const rec = await db.select({ n: sql<number>`count(*)` }).from(recurringTasks).where(and(eq(recurringTasks.assigneeId, id), isNull(recurringTasks.deletedAt))).get();
+    if ((own?.n ?? 0) > 0 || (rec?.n ?? 0) > 0) {
+      return c.json({ error: `לא ניתן להפוך לרכז: יש לו ${own?.n ?? 0} משימות (כולל שהושלמו) ו-${rec?.n ?? 0} משימות קבועות. רכז יכול להיות רק מי שאין לו משימות בכלל.` }, 400);
+    }
   }
   if (body.active !== undefined) {
     if (id === me.id && !body.active) return c.json({ error: "לא ניתן להשבית את עצמך" }, 400);
@@ -114,6 +124,13 @@ userRoutes.patch("/:id", async (c) => {
     if (so !== null) patch.sortOrder = so;
   }
   await db.update(users).set(patch).where(eq(users.id, id)).run();
+  if (patch.role !== row.role && id !== me.id) {
+    // A changed role means different screens and rights: sign the person out so their app reloads with the new role.
+    await db.delete(sessions).where(eq(sessions.userId, id)).run();
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, id)).run();
+    // Digests waiting for them describe the old role's tasks; a coordinator in particular is never assigned anything.
+    if (patch.role === "coordinator") await db.delete(notificationQueue).where(and(eq(notificationQueue.userId, id), isNull(notificationQueue.sentAt))).run();
+  }
   if (patch.active === 0) {
     await db.delete(sessions).where(eq(sessions.userId, id)).run();
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, id)).run();

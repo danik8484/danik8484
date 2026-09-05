@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type Attachment, type Deal, type PaymentMethod, type Task, type TaskEvent, type TaskStatus } from "@shared/types";
 
 type DealDraft = { name: string; amount: string; method: PaymentMethod | "" };
-import { canEditOrDelete, canMarkDone, noteRequiredForInProgress, taskTier } from "@shared/permissions";
+import { canAttachPhoto, canEditOrDelete, canManage, canMarkDone, isCoordinator, noteRequiredForInProgress, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
@@ -61,7 +61,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   }, [load]);
 
   const editable = task ? canEditOrDelete(s.user, task, s.users) : false;
-  const canChangeStatus = task ? s.canSee(task.assigneeId) : false;
+  const canChangeStatus = task ? canManage(s.user, task.assigneeId, s.users) : false;
   const canDone = task ? canMarkDone(s.user, task, s.users) : false;
   const noteRequired = task ? noteRequiredForInProgress(task) : true;
   const tier = task ? taskTier(task, s.users) : 1;
@@ -268,7 +268,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
           </div>
 
           {!task.deletedAt && !canChangeStatus && (
-            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">רק {s.nameOf(task.assigneeId)} או המנהל שלו יכולים לעדכן את הסטטוס. אתה יכול לערוך או למחוק את הבקשה.</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">רק {s.nameOf(task.assigneeId)} או המנהל שלו יכולים לעדכן את הסטטוס.{editable ? " אתה יכול לערוך או למחוק את הבקשה." : ""}</p>
           )}
           {!task.deletedAt && canChangeStatus && task.status === "done" && !canDone && (
             <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-700">המשימה סומנה כהושלמה על ידי {s.nameOf(task.completedById)}. רק המנהל יכול לפתוח אותה מחדש.</p>
@@ -453,7 +453,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
           <div data-testid="photos">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold text-ink-700">תמונות{photos.length > 0 && ` (${photos.length})`}</span>
-              {!task.deletedAt && (
+              {!task.deletedAt && canAttachPhoto(s.user, task, s.users) && (
                 <>
                   <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => addPhotos(e.target.files)} data-testid="photo-input" />
                   <Button variant="secondary" className="px-3 py-1.5" onClick={() => fileInput.current?.click()} disabled={uploading}>
@@ -499,7 +499,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                   {lightbox.fileName} · {s.nameOf(lightbox.uploadedById)} · {fmtDateTime(lightbox.createdAt)}
                 </span>
                 <div className="flex shrink-0 gap-2">
-                  {(lightbox.uploadedById === s.user.id || s.user.role === "admin") && (
+                  {!isCoordinator(s.user) && (lightbox.uploadedById === s.user.id || s.user.role === "admin") && (
                     <button className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold" onClick={() => removePhoto(lightbox)}>
                       מחיקה
                     </button>

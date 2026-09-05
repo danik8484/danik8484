@@ -8,10 +8,12 @@ import TaskForm from "../components/TaskForm";
 import TaskSheet from "../components/TaskSheet";
 import { PushBanner } from "../components/PushSettings";
 import { PRIORITY_ORDER, ROLE_LABEL, addDays, daysBetween, fmtDateLong, fmtDateShort, isoValid } from "../format";
-import { taskTier } from "@shared/permissions";
+import { isCoordinator, taskTier } from "@shared/permissions";
 
 export default function Board() {
   const s = useSession();
+  // A coordinator has no board of their own: no "my" card, and new tasks default to the first board they see.
+  const noOwnBoard = isCoordinator(s.user);
   const [params, setParams] = useSearchParams();
   const date = isoValid(params.get("date")) ? (params.get("date") as string) : s.today;
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -76,12 +78,13 @@ export default function Board() {
 
   const orderedUsers = useMemo(() => {
     // Deactivated teammates keep a card only while they still have tasks on this day, so nothing gets lost.
-    const shown = s.users.filter((u) => u.active || (byUser.get(u.id)?.length ?? 0) > 0);
-    const mine = shown.filter((u) => u.id === s.user.id);
+    // Coordinators have no board, so nobody gets a card for them (not even the admin).
+    const shown = s.users.filter((u) => !isCoordinator(u) && (u.active || (byUser.get(u.id)?.length ?? 0) > 0));
+    const mine = noOwnBoard ? [] : shown.filter((u) => u.id === s.user.id);
     const visible = shown.filter((u) => u.id !== s.user.id && s.canSee(u.id));
-    const hidden = shown.filter((u) => !s.canSee(u.id));
+    const hidden = shown.filter((u) => u.id !== s.user.id && !s.canSee(u.id));
     return [...mine, ...visible, ...hidden];
-  }, [s, byUser]);
+  }, [s, byUser, noOwnBoard]);
 
   const summary = useMemo(() => {
     const done = asOf.filter((t) => t.status === "done").length;
@@ -204,7 +207,7 @@ export default function Board() {
       )}
 
       <button
-        onClick={() => setAddFor(s.user.id)}
+        onClick={() => setAddFor(noOwnBoard ? (orderedUsers.find((u) => s.canSee(u.id))?.id ?? orderedUsers[0]?.id ?? s.user.id) : s.user.id)}
         className="fixed bottom-5 end-5 z-30 flex h-14 items-center gap-2 rounded-full bg-brand-600 px-5 text-base font-bold text-white shadow-lg hover:bg-brand-700 active:scale-95"
         aria-label="הוספת משימה"
       >
