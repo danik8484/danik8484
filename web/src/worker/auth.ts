@@ -62,7 +62,7 @@ const PER_KEY_COOLDOWN_MS = 45 * 1000;
  * an hourly cap per identifier, a short cooldown per identifier, and a cap per client IP
  * (so an anonymous caller cannot lock a teammate out or spam their phone).
  */
-export async function issueCode(db: Db, key: string, ip: string | null, cooldownMs = PER_KEY_COOLDOWN_MS): Promise<{ ok: true; code: string } | { ok: false; error: string; status: number }> {
+export async function issueCode(db: Db, key: string, ip: string | null, cooldownMs = PER_KEY_COOLDOWN_MS, maxPerHour = MAX_CODES_PER_HOUR): Promise<{ ok: true; code: string } | { ok: false; error: string; status: number }> {
   const now = Date.now();
   if (ip) {
     const ipKey = `ip:${ip}`;
@@ -79,7 +79,7 @@ export async function issueCode(db: Db, key: string, ip: string | null, cooldown
     .from(loginCodes)
     .where(and(eq(loginCodes.email, key), gt(loginCodes.createdAt, now - 60 * 60 * 1000)))
     .get();
-  if ((recent?.n ?? 0) >= MAX_CODES_PER_HOUR) return { ok: false, error: "יותר מדי בקשות. נסה שוב בעוד שעה.", status: 429 };
+  if ((recent?.n ?? 0) >= maxPerHour) return { ok: false, error: "יותר מדי בקשות. נסה שוב בעוד שעה.", status: 429 };
   if (cooldownMs > 0 && recent?.last && now - Number(recent.last) < cooldownMs) return { ok: false, error: "נשלח קוד לפני רגע. חכה כמה שניות ונסה שוב.", status: 429 };
   const code = randomCode();
   await db.insert(loginCodes).values({ email: key, codeHash: await sha256(key + ":" + code), expiresAt: now + CODE_TTL_MS, createdAt: now }).run();
@@ -128,7 +128,8 @@ export async function requestCode(db: Db, env: Env, email: string): Promise<Requ
     .from(loginCodes)
     .where(and(eq(loginCodes.email, email), gt(loginCodes.createdAt, now - 60 * 60 * 1000)))
     .get();
-  if ((recent?.n ?? 0) >= MAX_CODES_PER_HOUR) {
+  // The local test suite signs in far more than 20 times an hour; production keeps the cap.
+  if ((recent?.n ?? 0) >= (env.APP_ENV === "development" ? 1000 : MAX_CODES_PER_HOUR)) {
     return { ok: false, error: "יותר מדי בקשות. נסה שוב בעוד שעה.", status: 429 };
   }
   const user = await findUserByEmail(db, env, email);

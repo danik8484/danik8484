@@ -267,11 +267,13 @@ function UserCard({
   // Urgent tasks always come first, whoever added them; then management, own, and requests from teammates,
   // each group with high priority before normal.
   const urgent = active.filter((t) => t.priority === "urgent");
+  // Four clear sections: urgent · daily (recurring) · new (everything else, management first, then own, then requests) · done.
   const rest = active.filter((t) => t.priority !== "urgent");
-  const fromManagement = rest.filter((t) => taskTier(t, s.users) === 0).sort(byPriority);
-  const own = rest.filter((t) => taskTier(t, s.users) === 1).sort(byPriority);
-  const fromPeers = rest.filter((t) => taskTier(t, s.users) === 2).sort(byPriority);
-  const showHeaders = [fromManagement, own, fromPeers].filter((g) => g.length > 0).length > 1;
+  const daily = rest.filter((t) => t.recurringId).sort(byPriority);
+  const fresh = rest.filter((t) => !t.recurringId);
+  const fromManagement = fresh.filter((t) => taskTier(t, s.users) === 0).sort(byPriority);
+  const own = fresh.filter((t) => taskTier(t, s.users) === 1).sort(byPriority);
+  const fromPeers = fresh.filter((t) => taskTier(t, s.users) === 2).sort(byPriority);
 
   return (
     <section className={`rounded-2xl bg-white shadow-sm ${isMe ? "ring-2 ring-brand-500" : ""}`} data-testid={`card-${user.id}`} aria-label={user.name}>
@@ -332,47 +334,57 @@ function UserCard({
         <div className="px-1 py-1">
           {tasks.length === 0 && <p className="px-3 py-4 text-center text-sm text-slate-400">אין משימות ליום זה</p>}
           {urgent.length > 0 && (
-            <ul className="mx-1 mb-1 rounded-xl border border-red-200 bg-red-50/60" data-testid={`group-urgent-${user.id}`}>
-              {urgent.map((t) => (
-                <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
-              ))}
-            </ul>
-          )}
-          {fromManagement.length > 0 && (
             <>
-              {showHeaders && <GroupHeader>מההנהלה</GroupHeader>}
-              <ul data-testid={`group-management-${user.id}`}>
-                {fromManagement.map((t) => (
+              <SectionHeader tone="red">🚨 משימות דחופות</SectionHeader>
+              <ul className="mx-1 mb-1 rounded-xl border border-red-200 bg-red-50/60" data-testid={`group-urgent-${user.id}`}>
+                {urgent.map((t) => (
                   <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
                 ))}
               </ul>
             </>
           )}
-          {own.length > 0 && (
+          {daily.length > 0 && (
             <>
-              {showHeaders && <GroupHeader>{isMe ? "שלי" : `של ${user.name}`}</GroupHeader>}
-              <ul data-testid={`group-own-${user.id}`}>
-                {own.map((t) => (
+              <SectionHeader tone="sky">🔁 משימות יומיות</SectionHeader>
+              <ul data-testid={`group-daily-${user.id}`}>
+                {daily.map((t) => (
                   <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
                 ))}
               </ul>
             </>
           )}
-          {fromPeers.length > 0 && (
+          {fromManagement.length + own.length + fromPeers.length > 0 && (
             <>
-              <div className="mx-3 mt-1 border-t border-dashed border-violet-200" />
-              <GroupHeader className="text-violet-700">בקשות מאנשי צוות אחרים</GroupHeader>
-              <ul data-testid={`group-peers-${user.id}`}>
-                {fromPeers.map((t) => (
-                  <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
-                ))}
-              </ul>
+              <SectionHeader tone="brand">🆕 משימות חדשות</SectionHeader>
+              <div data-testid={`group-new-${user.id}`}>
+                {fromManagement.length > 0 && (
+                  <ul data-testid={`group-management-${user.id}`}>
+                    {fromManagement.map((t) => (
+                      <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
+                    ))}
+                  </ul>
+                )}
+                {own.length > 0 && (
+                  <ul data-testid={`group-own-${user.id}`}>
+                    {own.map((t) => (
+                      <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
+                    ))}
+                  </ul>
+                )}
+                {fromPeers.length > 0 && (
+                  <ul className="mx-2 border-t border-dashed border-violet-200" data-testid={`group-peers-${user.id}`}>
+                    {fromPeers.map((t) => (
+                      <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
+                    ))}
+                  </ul>
+                )}
+              </div>
             </>
           )}
           {done.length > 0 && (
             <>
-              {active.length > 0 && <div className="mx-3 my-1 border-t border-dashed border-slate-200" />}
-              <ul>
+              <SectionHeader tone="slate">✅ הושלמו</SectionHeader>
+              <ul data-testid={`group-done-${user.id}`}>
                 {done.map((t) => (
                   <TaskRow key={t.id} task={t} viewDate={viewDate} onOpen={onOpen} />
                 ))}
@@ -390,8 +402,9 @@ function UserCard({
   );
 }
 
-function GroupHeader({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`px-3 pb-0.5 pt-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 ${className}`}>{children}</div>;
+function SectionHeader({ children, tone }: { children: React.ReactNode; tone: "red" | "sky" | "brand" | "slate" }) {
+  const cls = { red: "bg-red-50 text-red-700", sky: "bg-sky-50 text-sky-800", brand: "bg-brand-50 text-brand-700", slate: "bg-slate-100 text-slate-600" }[tone];
+  return <div className={`mx-2 mb-1 mt-2 rounded-lg px-3 py-1.5 text-sm font-bold ${cls}`}>{children}</div>;
 }
 
 function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onOpen: (id: number) => void }) {

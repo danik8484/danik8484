@@ -60,6 +60,10 @@ export interface DealsResponse {
   total: number;
   byMethod: Record<string, { count: number; amount: number }>;
 }
+/** How often a reminder repeats, in minutes. */
+export const REMINDER_INTERVALS = [30, 60, 120, 180, 1440] as const;
+export const REMINDER_INTERVAL_LABEL: Record<number, string> = { 30: "חצי שעה", 60: "שעה", 120: "שעתיים", 180: "3 שעות", 1440: "פעם ביום" };
+
 export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder";
 
 export interface PublicUser {
@@ -88,8 +92,9 @@ export interface Task {
   recurringId: number | null;
   kind: TaskKind;
   priority: TaskPriority;
-  reminderAt: string | null; // ISO instant; message every 30 min from then until done
+  reminderAt: string | null; // ISO instant; a message then, and again every `reminderEveryMin` minutes until done
   reminderLastSentAt: string | null;
+  reminderEveryMin: number | null; // one of REMINDER_INTERVALS; null = 30
   metricDeals: number | null;
   metricCalls: number | null;
   deals: Deal[];
@@ -191,6 +196,8 @@ export interface AppSettings {
   whatsappLang: string;
   /** Daily reminder time per weekday (0 = Sunday), "HH:MM" or "" for none. Saturday is the "plan the week" reminder. */
   reminderTimes: string[];
+  /** Morning report (Sun–Fri): each person gets their tasks for today at this time, "HH:MM" or "" for none. */
+  morningReportTime: string;
   /** DND CASH (payroll): where it lives, and who may mark a deal as "sales + training". The connection itself is stored separately. */
   dndBaseUrl: string;
   dndPlusTrainingUserIds: number[];

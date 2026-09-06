@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, isStandingOrder, type Attachment, type Deal, type DealDnd, type PaymentMethod, type Task, type TaskEvent, type TaskStatus } from "@shared/types";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, REMINDER_INTERVALS, REMINDER_INTERVAL_LABEL, isStandingOrder, type Attachment, type Deal, type DealDnd, type PaymentMethod, type Task, type TaskEvent, type TaskStatus } from "@shared/types";
 
 type DealDraft = { key?: string; name: string; amount: string; method: PaymentMethod | ""; plusTraining: boolean; months: string; firstDue: string; upfront: string; dnd?: DealDnd };
 const EMPTY_DEAL: DealDraft = { name: "", amount: "", method: "", plusTraining: false, months: "", firstDue: "", upfront: "" };
@@ -34,6 +34,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reminderValue, setReminderValue] = useState("");
+  const [reminderEvery, setReminderEvery] = useState<number>(30);
+  const [nudged, setNudged] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -70,6 +72,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setError("");
     setReason("");
     setReminderOpen(false);
+    setNudged(false);
     load().catch((e) => setError((e as Error).message));
   }, [load]);
 
@@ -115,6 +118,22 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     }
   }
 
+  /** "Push": send the task to its person again, right now. */
+  async function sendNudge() {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.nudge(task.id);
+      setNudged(true);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addPhotos(files: FileList | null) {
     if (!task || !files || files.length === 0) return;
     setUploading(true);
@@ -153,7 +172,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setBusy(true);
     setError("");
     try {
-      await api.setReminder(task.id, value ? fromLocalInput(value) : null);
+      await api.setReminder(task.id, value ? fromLocalInput(value) : null, reminderEvery);
       await load();
       setReminderOpen(false);
       onChanged();
@@ -503,12 +522,25 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             </div>
           )}
 
+          {!task.deletedAt && task.status !== "done" && task.assigneeId !== s.user.id && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/50 p-3" data-testid="nudge">
+              <span className="text-sm text-ink-700">🔔 לשלוח ל{s.nameOf(task.assigneeId)} את המשימה שוב עכשיו</span>
+              <Button variant="secondary" className="px-3 py-1.5" disabled={busy || nudged} onClick={sendNudge} data-testid="nudge-button">
+                {nudged ? "נשלח ✓" : "פוש"}
+              </Button>
+            </div>
+          )}
+
           {!task.deletedAt && task.status !== "done" && canChangeStatus && (
             <div className="rounded-xl border border-slate-200 p-3" data-testid="reminder">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-ink-700">
                   ⏰ תזכורת
-                  {task.reminderAt && <span className="ms-2 text-xs font-normal text-slate-600">ל-{fmtDateTime(task.reminderAt)}, ואז כל חצי שעה עד שמסמנים הושלם</span>}
+                  {task.reminderAt && (
+                    <span className="ms-2 text-xs font-normal text-slate-600">
+                      ל-{fmtDateTime(task.reminderAt)}, ואז כל {REMINDER_INTERVAL_LABEL[task.reminderEveryMin ?? 30] ?? `${task.reminderEveryMin} דקות`} עד שמסמנים הושלם
+                    </span>
+                  )}
                 </span>
                 {!reminderOpen && (
                   <div className="flex gap-1">
@@ -522,6 +554,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                       className="px-3 py-1.5"
                       onClick={() => {
                         setReminderValue(task.reminderAt ? toLocalInput(task.reminderAt) : toLocalInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()));
+                        setReminderEvery(task.reminderEveryMin ?? 30);
                         setReminderOpen(true);
                       }}
                     >
@@ -535,6 +568,16 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                   <label className="block flex-1">
                     <span className="mb-1 block text-xs font-semibold text-slate-600">מתי לעשות / מתי להמשיך</span>
                     <input type="datetime-local" className={inputCls} value={reminderValue} onChange={(e) => setReminderValue(e.target.value)} data-testid="reminder-input" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-slate-600">ואז להזכיר שוב כל</span>
+                    <select className={inputCls} value={reminderEvery} onChange={(e) => setReminderEvery(Number(e.target.value))} data-testid="reminder-every">
+                      {REMINDER_INTERVALS.map((m) => (
+                        <option key={m} value={m}>
+                          {REMINDER_INTERVAL_LABEL[m]}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <Button onClick={() => saveReminder(reminderValue)} disabled={busy || !reminderValue}>
                     שמירה

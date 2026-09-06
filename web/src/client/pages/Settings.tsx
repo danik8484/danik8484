@@ -28,6 +28,7 @@ export default function Settings() {
   const [dndUrl, setDndUrl] = useState("");
   const [dndToken, setDndToken] = useState("");
   const [showDndAdvanced, setShowDndAdvanced] = useState(false);
+  const [morningTime, setMorningTime] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -45,6 +46,7 @@ export default function Settings() {
       setWaLang(data.whatsappLang);
       setTimes(data.reminderTimes);
       setPlusIds(data.dndPlusTrainingUserIds);
+      setMorningTime(data.morningReportTime);
       setDndUrl(data.dndBaseUrl);
       setTgToken("");
       setWaToken("");
@@ -87,6 +89,7 @@ export default function Settings() {
         whatsappLoginTemplate: waLoginTemplate,
         whatsappLang: waLang,
         reminderTimes: times,
+        morningReportTime: morningTime,
         dndBaseUrl: dndUrl,
         dndPlusTrainingUserIds: plusIds,
       });
@@ -293,6 +296,10 @@ export default function Settings() {
 
       <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-base font-bold text-ink-900">תזכורות יומיות</h2>
+        <label className="block text-xs font-semibold text-slate-600">
+          ☀️ דוח בוקר (א׳–ו׳): כל אחד מקבל בשעה הזאת את רשימת המשימות שלו להיום. השאר ריק כדי לבטל.
+          <input type="time" className={`${inputCls} mt-1 max-w-40`} value={morningTime} onChange={(e) => setMorningTime(e.target.value)} data-testid="morning-time" />
+        </label>
         <p className="text-xs text-slate-600">
           א׳–ה׳ ושישי: תזכורת "מלא ועדכן לו"ז" למי שיש לו משימות שלא עודכנו. שבת: תזכורת לכולם להוסיף ללו"ז את המשימות ההכרחיות לשבוע. השאר ריק כדי לבטל יום.
         </p>

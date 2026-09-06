@@ -29,7 +29,7 @@ authRoutes.post("/request-code", async (c) => {
     const user = userId === null ? undefined : await db.select().from(users).where(and(eq(users.id, userId), eq(users.active, 1))).get();
     if (!user) return c.json({ error: "איש צוות לא נמצא" }, 404);
     const dev = c.env.APP_ENV === "development";
-    const issued = await issueCode(db, `user:${user.id}`, dev ? null : (c.req.header("cf-connecting-ip") ?? null), dev ? 0 : undefined);
+    const issued = await issueCode(db, `user:${user.id}`, dev ? null : (c.req.header("cf-connecting-ip") ?? null), dev ? 0 : undefined, dev ? 1000 : undefined);
     if (!issued.ok) return c.json({ error: issued.error }, issued.status as 429);
     const s = await getSettings(db, c.env);
     if (dev) {

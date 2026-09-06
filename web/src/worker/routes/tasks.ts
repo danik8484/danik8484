@@ -1,17 +1,17 @@
 import { Hono } from "hono";
-import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, asc, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, like, lt, lte, notInArray, or, asc, sql } from "drizzle-orm";
 import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
 import { listAttachments, photoCounts } from "./photos";
-import { adminFeedFor, adminFeedText, notifyTaskNow, notifyUser, queueTaskNotification, shortName } from "../notify";
+import { adminFeedFor, adminFeedText, describeTask, notifyTaskNow, notifyUser, queueTaskNotification, shortName } from "../notify";
 import { fmtWeekdaysHe } from "../dates";
 import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf } from "../dates";
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
 import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, canSeeActivityLog, canSeeDeals, isCoordinator, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, isStandingOrder, type BoardResponse, type Deal, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, REMINDER_INTERVALS, REMINDER_INTERVAL_LABEL, isStandingOrder, type BoardResponse, type Deal, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
 import { getSettings } from "../settings";
 import { getDndAuth, syncDndDeals } from "../dnd";
 import { parseDeals } from "../serialize";
@@ -346,12 +346,60 @@ taskRoutes.post("/:id/reminder", async (c) => {
     if (d.getTime() > Date.now() + 366 * 24 * 60 * 60 * 1000) return c.json({ error: "תזכורת אפשר לקבוע עד שנה קדימה" }, 400);
     reminderAt = d.toISOString();
   }
-  await db.update(tasks).set({ reminderAt, reminderLastSentAt: null, reminderById: reminderAt ? me.id : null, updatedAt: nowIso() }).where(eq(tasks.id, id)).run();
+  // How often to repeat until the task is done (30 minutes unless chosen otherwise).
+  let everyMin: number | null = null;
+  if (reminderAt) {
+    const raw = body.everyMin;
+    const v = raw === undefined || raw === null || raw === "" ? 30 : int(raw);
+    if (v === null || !(REMINDER_INTERVALS as readonly number[]).includes(v)) return c.json({ error: "מרווח התזכורת לא תקין" }, 400);
+    everyMin = v;
+  }
+  const everyLabel = everyMin ? (REMINDER_INTERVAL_LABEL[everyMin] ?? `${everyMin} דקות`) : "";
+  await db.update(tasks).set({ reminderAt, reminderLastSentAt: null, reminderById: reminderAt ? me.id : null, reminderEveryMin: everyMin, updatedAt: nowIso() }).where(eq(tasks.id, id)).run();
   const when = reminderAt ? new Intl.DateTimeFormat("he-IL", { timeZone: c.env.TIMEZONE, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(reminderAt)) : "";
-  await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "reminder", note: reminderAt ? `תזכורת ל-${when}` : "התזכורת בוטלה" }).run();
-  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "reminder", { extra: reminderAt ? `תזכורת ל-${when} (כל חצי שעה עד שמסמנים הושלם)` : "התזכורת בוטלה" }));
+  await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "reminder", note: reminderAt ? `תזכורת ל-${when}, כל ${everyLabel}` : "התזכורת בוטלה" }).run();
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "reminder", { extra: reminderAt ? `תזכורת ל-${when} (כל ${everyLabel} עד שמסמנים הושלם)` : "התזכורת בוטלה" }));
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
   return c.json({ ok: true, task: toTask(updated!) });
+});
+
+/** "Push": send the task to its person again, right now. Whoever may open the task (except the person themselves), at most once every two minutes. */
+taskRoutes.post("/:id/nudge", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user");
+  const id = int(c.req.param("id"));
+  if (id === null) return c.json({ error: "לא נמצא" }, 404);
+  const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
+  if (!row) return c.json({ error: "לא נמצא" }, 404);
+  if (!canOpenTask(toPublicUser(me, false), row, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  if (row.assigneeId === me.id) return c.json({ error: "זו המשימה שלך – פוש שולחים למישהו אחר" }, 400);
+  if (row.status === "done") return c.json({ error: "המשימה כבר הושלמה" }, 400);
+  const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const recent = await db
+    .select({ id: taskEvents.id })
+    .from(taskEvents)
+    .where(and(eq(taskEvents.taskId, id), eq(taskEvents.type, "reminder"), like(taskEvents.note, "פוש%"), gte(taskEvents.createdAt, since)))
+    .get();
+  if (recent) return c.json({ error: "נשלח פוש לפני פחות משתי דקות. חכה רגע." }, 429);
+  const team = c.get("team");
+  const assigneeName = team.find((u) => u.id === row.assigneeId)?.name ?? "";
+  await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "reminder", note: `פוש נשלח ל${assigneeName}` }).run();
+  const origin = new URL(c.req.url).origin;
+  let delivered: "push" | "whatsapp" | "both" | "none" = "none";
+  try {
+    delivered = await notifyUser(c.env, db, row.assigneeId, {
+      title: `🔔 פוש: ${row.title}`,
+      body: `${describeTask(row, team)} · תזכורת מ${shortName(me.name, team, me.id)}`,
+      url: `${origin}/?task=${id}`,
+      tag: `nudge-${id}`,
+    });
+  } catch (e) {
+    console.error("nudge failed", e);
+  }
+  // No device and no WhatsApp: fall back to the batched digest so nothing is lost.
+  if (delivered === "none") await queueTaskNotification(db, row.assigneeId, me.id, id);
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "reminder", { extra: `פוש נשלח ל${assigneeName}` }));
+  return c.json({ ok: true, delivered });
 });
 
 taskRoutes.patch("/:id", async (c) => {

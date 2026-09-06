@@ -68,6 +68,7 @@ export function toTask(t: TaskRow): Task {
     priority: t.priority,
     reminderAt: t.reminderAt,
     reminderLastSentAt: t.reminderLastSentAt,
+    reminderEveryMin: t.reminderEveryMin ?? null,
     metricDeals: t.metricDeals,
     metricCalls: t.metricCalls,
     deals: parseDeals(t.dealsJson),

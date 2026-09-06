@@ -82,7 +82,7 @@ test.describe.serial("teammates can request tasks from each other", () => {
     const page = await login(browser, "dani@example.com");
     // Request from Uri H sits in the separate peers group of Dani's card
     await expect(page.getByTestId("group-peers-1").getByText(T.uriToDani)).toBeVisible();
-    await expect(page.getByTestId("card-1").getByText("בקשות מאנשי צוות אחרים")).toBeVisible();
+    await expect(page.getByTestId("card-1").getByText("משימות חדשות")).toBeVisible();
 
     // Dani assigns a task to Uri H → top group in Uri's card, above Uri's own task
     await page.getByTestId("card-5").getByRole("button", { name: /הוספת משימה/ }).click();

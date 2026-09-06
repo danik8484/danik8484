@@ -9,11 +9,10 @@ import { getSettings } from "./settings";
 import { chunk } from "./validate";
 import { localDate, weekdayOf } from "./dates";
 import { parseDeals } from "./serialize";
-import { PAYMENT_METHOD_LABEL, type AppSettings, type TaskPriority } from "@shared/types";
+import { PAYMENT_METHOD_LABEL, REMINDER_INTERVAL_LABEL, type AppSettings, type TaskPriority } from "@shared/types";
 
 const DEBOUNCE_MS = 3 * 60 * 1000; // wait for a quiet period after the last added task
 const MAX_WAIT_MS = 15 * 60 * 1000; // ...but never hold a digest longer than this
-const TASK_REMINDER_EVERY_MS = 30 * 60 * 1000;
 
 function priorityPrefix(p: TaskPriority): string {
   return p === "urgent" ? "🚨 דחוף: " : p === "high" ? "⬆️ " : "";
@@ -208,27 +207,22 @@ export async function sendDayEndReminders(env: Env, db: Db, appUrl: string, now 
   return sent;
 }
 
-/** Per-task reminders: first at the chosen time, then every 30 minutes until the task is done. */
+/** Per-task reminders: first at the chosen time, then again every `reminderEveryMin` minutes (default 30) until the task is done. */
 export async function sendTaskReminders(env: Env, db: Db, appUrl: string, now = new Date()): Promise<number> {
   const nowIsoStr = now.toISOString();
-  const resendBefore = new Date(now.getTime() - TASK_REMINDER_EVERY_MS).toISOString();
   const due = await db
     .select()
     .from(tasks)
-    .where(
-      and(
-        isNull(tasks.deletedAt),
-        ne(tasks.status, "done"),
-        lte(tasks.reminderAt, nowIsoStr),
-        or(isNull(tasks.reminderLastSentAt), lte(tasks.reminderLastSentAt, resendBefore)),
-      ),
-    )
+    .where(and(isNull(tasks.deletedAt), ne(tasks.status, "done"), lte(tasks.reminderAt, nowIsoStr)))
     .all();
   if (due.length === 0) return 0;
   const settings = await getSettings(db, env);
   const team = await db.select({ id: users.id, name: users.name, active: users.active }).from(users).all();
   let sent = 0;
   for (const t of due) {
+    const everyMin = t.reminderEveryMin ?? 30;
+    const resendBefore = new Date(now.getTime() - everyMin * 60 * 1000).toISOString();
+    if (t.reminderLastSentAt && t.reminderLastSentAt > resendBefore) continue;
     // Atomic claim: two overlapping runs cannot both send the same reminder.
     const claimed = await db
       .update(tasks)
@@ -242,12 +236,93 @@ export async function sendTaskReminders(env: Env, db: Db, appUrl: string, now = 
       env,
       db,
       t.assigneeId,
-      { title: "⏰ תזכורת למשימה", body: `${describeTask(t, team)} · ההודעה תחזור כל חצי שעה עד שתסמן הושלם`, url: appUrl + "/", tag: `reminder-${t.id}` },
+      { title: "⏰ תזכורת למשימה", body: `${describeTask(t, team)} · ההודעה תחזור כל ${REMINDER_INTERVAL_LABEL[everyMin] ?? `${everyMin} דקות`} עד שתסמן הושלם`, url: appUrl + "/", tag: `reminder-${t.id}` },
       settings,
     );
     sent++;
   }
   return sent;
+}
+
+/* ------------------------------------------------------------------ */
+/* Morning report: Sun–Fri at the configured time, each person's tasks for today */
+/* ------------------------------------------------------------------ */
+
+const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+
+/** The lines of one person's morning report: everything still open for today (overdue ones included), urgent first. */
+export async function morningReportLines(db: Db, userId: number, today: string, team: { id: number; name: string }[]): Promise<string[]> {
+  const rows = await db
+    .select()
+    .from(tasks)
+    .where(and(isNull(tasks.deletedAt), eq(tasks.assigneeId, userId), lte(tasks.dueDate, today), ne(tasks.status, "done")))
+    .orderBy(asc(tasks.dueDate), asc(tasks.id))
+    .all();
+  rows.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || a.dueDate.localeCompare(b.dueDate) || a.id - b.id);
+  return rows.map((t) => {
+    const by = t.createdById !== t.assigneeId ? shortName(team.find((u) => u.id === t.createdById)?.name ?? "", team, t.createdById) : "";
+    const late = t.dueDate < today ? ` (מ-${t.dueDate.slice(8, 10)}.${t.dueDate.slice(5, 7)})` : "";
+    return `• ${priorityPrefix(t.priority)}${t.title}${t.recurringId ? " (קבועה)" : ""}${by ? ` · מאת ${by}` : ""}${late}${t.status === "in_progress" ? " · בתהליך" : ""}`;
+  });
+}
+
+export async function sendMorningReports(env: Env, db: Db, appUrl: string, now = new Date(), force = false): Promise<number> {
+  const tz = env.TIMEZONE;
+  const today = localDate(tz, now);
+  if (weekdayOf(today) === 6) return 0; // no report on Saturday
+  const settings = await getSettings(db, env);
+  const at = settings.morningReportTime || "";
+  if (!at) return 0;
+  const [hh, mm] = at.split(":").map(Number);
+  if (!force && localHHMM(tz, now) < hh * 60 + mm) return 0;
+  const candidates = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.active, 1), or(isNull(users.morningSentDate), ne(users.morningSentDate, today))))
+    .all();
+  if (candidates.length === 0) return 0;
+  const team = await db.select({ id: users.id, name: users.name }).from(users).all();
+  let sent = 0;
+  for (const u of candidates) {
+    const claimed = await db
+      .update(users)
+      .set({ morningSentDate: today })
+      .where(and(eq(users.id, u.id), or(isNull(users.morningSentDate), ne(users.morningSentDate, today))))
+      .returning({ id: users.id })
+      .get();
+    if (!claimed) continue;
+    const lines = await morningReportLines(db, u.id, today, team);
+    if (lines.length === 0) continue;
+    const shown = lines.slice(0, 12);
+    const more = lines.length - shown.length;
+    await notifyUser(
+      env,
+      db,
+      u.id,
+      {
+        title: `☀️ המשימות שלך להיום (${today.slice(8, 10)}.${today.slice(5, 7)})`,
+        body: [...shown, ...(more > 0 ? [`ועוד ${more} משימות בלו"ז`] : [])].join("\n"),
+        url: appUrl + "/",
+        tag: "morning",
+      },
+      settings,
+    );
+    sent++;
+  }
+  return sent;
+}
+
+/** For the settings screen: what each active person would get today, and whether it already went out. */
+export async function morningReportPreview(env: Env, db: Db): Promise<{ today: string; time: string; people: { userId: number; name: string; sentToday: boolean; lines: string[] }[] }> {
+  const today = localDate(env.TIMEZONE);
+  const settings = await getSettings(db, env);
+  const all = await db.select().from(users).all();
+  const team = all.map((u) => ({ id: u.id, name: u.name }));
+  const people = [];
+  for (const u of all.filter((x) => x.active === 1)) {
+    people.push({ userId: u.id, name: u.name, sentToday: u.morningSentDate === today, lines: await morningReportLines(db, u.id, today, team) });
+  }
+  return { today, time: settings.morningReportTime || "", people };
 }
 
 /* ------------------------------------------------------------------ */

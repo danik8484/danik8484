@@ -51,7 +51,9 @@ export const api = {
   setStatus: (id: number, status: TaskStatus, note: string, metrics?: { deals?: Deal[]; metricCalls?: number | null }) =>
     request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/status`, { status, note, ...(metrics ?? {}) }),
   deleteTask: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/tasks/${id}`, { reason }),
-  setReminder: (id: number, reminderAt: string | null) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/reminder`, { reminderAt }),
+  setReminder: (id: number, reminderAt: string | null, everyMin?: number) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/reminder`, { reminderAt, everyMin }),
+  nudge: (id: number) => request<{ ok: true; delivered: "push" | "whatsapp" | "both" | "none" }>("POST", `/api/tasks/${id}/nudge`),
+  morningPreview: () => request<{ ok: true; today: string; time: string; people: { userId: number; name: string; sentToday: boolean; lines: string[] }[] }>("GET", "/api/settings/morning-report/preview"),
   settings: () => request<ClientSettings>("GET", "/api/settings"),
   saveSettings: (input: Partial<AppSettings>) => request<{ ok: true; settings: ClientSettings }>("PUT", "/api/settings", input),
   resetReminders: () => request<{ ok: true; settings: ClientSettings }>("POST", "/api/settings/reset-reminders"),

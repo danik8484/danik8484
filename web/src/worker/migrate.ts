@@ -7,6 +7,7 @@ import m0006 from "../../migrations/0006_phones_deals.sql";
 import m0007 from "../../migrations/0007_priority_reminders.sql";
 import m0008 from "../../migrations/0008_coordinator_role.sql";
 import m0009 from "../../migrations/0009_coordinator_manager.sql";
+import m0010 from "../../migrations/0010_reminder_interval_morning.sql";
 import type { Env } from "./env";
 
 /**
@@ -23,6 +24,7 @@ const MIGRATIONS: [string, string][] = [
   ["0007_priority_reminders.sql", m0007],
   ["0008_coordinator_role.sql", m0008],
   ["0009_coordinator_manager.sql", m0009],
+  ["0010_reminder_interval_morning.sql", m0010],
 ];
 
 let ready: Promise<void> | null = null;

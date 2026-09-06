@@ -13,6 +13,7 @@ export const users = sqliteTable("users", {
   sortOrder: integer("sort_order").notNull().default(0),
   active: integer("active").notNull().default(1),
   reminderSentDate: text("reminder_sent_date"),
+  morningSentDate: text("morning_sent_date"),
   createdAt: text("created_at").notNull().default(nowIso),
 });
 
@@ -77,6 +78,7 @@ export const tasks = sqliteTable(
     reminderAt: text("reminder_at"),
     reminderLastSentAt: text("reminder_last_sent_at"),
     reminderById: integer("reminder_by_id"),
+    reminderEveryMin: integer("reminder_every_min"),
     metricDeals: integer("metric_deals"),
     metricCalls: integer("metric_calls"),
     dealsJson: text("deals_json"),

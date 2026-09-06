@@ -6,6 +6,7 @@ import { sendWhatsApp, whatsappConfigured, WA_PHONE_ID_RE, BRIDGE_HOST_RE, bridg
 import { readJson, str, phone as parsePhone, int } from "../validate";
 import { DND_DEFAULT_URL, clearDndAuth, dndConnect, dndStatus, dndTest, syncDndDeals } from "../dnd";
 import type { Db } from "../db/client";
+import { morningReportPreview } from "../notify";
 import type { AppSettings } from "@shared/types";
 
 export const settingsRoutes = new Hono<AppEnv>();
@@ -87,6 +88,12 @@ settingsRoutes.put("/", async (c) => {
     }
     next.reminderTimes = times;
   }
+  if (body.morningReportTime !== undefined) {
+    const v = body.morningReportTime;
+    if (v === "" || v === null) next.morningReportTime = "";
+    else if (typeof v === "string" && TIME.test(v)) next.morningReportTime = v;
+    else return c.json({ error: "שעת דוח הבוקר לא תקינה (פורמט HH:MM)" }, 400);
+  }
   if (body.dndBaseUrl !== undefined) {
     const u = str(body.dndBaseUrl, 200, { required: false });
     if (u === null) return c.json({ error: "כתובת DND CASH ארוכה מדי" }, 400);
@@ -105,6 +112,9 @@ settingsRoutes.put("/", async (c) => {
   await saveSettings(db, next);
   return c.json({ ok: true, settings: await clientView(db, next) });
 });
+
+/** What the morning report would say to each person today, and who already got it. */
+settingsRoutes.get("/morning-report/preview", async (c) => c.json({ ok: true, ...(await morningReportPreview(c.env, c.get("db"))) }));
 
 /* ---------------- DND CASH (payroll): connection is stored apart from the settings blob ---------------- */
 
