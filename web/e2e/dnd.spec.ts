@@ -211,12 +211,12 @@ test.describe.serial("DND CASH: a closed deal saved here becomes a new deal ther
       dealType: "SALES_PLUS_TRAINING",
       paymentMethod: "STANDING_ORDER",
       agentId: "agent-ron",
-      closedAt: today,
+      closedAt: `${today}T00:00:00.000Z`,
       standingOrderMonths: 10,
       firstDueDate: today,
     });
     expect(String(posted[0]!.notes)).toContain(`[לוז #${ronTask}/${dealKeyRon}]`);
-    expect(posted[1]).toMatchObject({ clientName: "אבי כהן", totalAmount: 1000, dealType: "SALES_ONLY", paymentMethod: "CASH", agentId: "agent-ron", closedAt: today });
+    expect(posted[1]).toMatchObject({ clientName: "אבי כהן", totalAmount: 1000, dealType: "SALES_ONLY", paymentMethod: "CASH", agentId: "agent-ron", closedAt: `${today}T00:00:00.000Z` });
     expect(posted[1]).not.toHaveProperty("standingOrderMonths");
   });
 
@@ -270,12 +270,12 @@ test.describe.serial("DND CASH: a closed deal saved here becomes a new deal ther
     let t = await settled(request, uriHTask, (d) => (d[0]?.attempts ?? 0) >= 1 && d[1]?.status === "error");
     expect(t.deals[0].dnd).toMatchObject({ status: "pending", attempts: 1 }); // 500 → try again later
     expect(t.deals[0].dnd.error).toContain("500");
-    expect(t.deals[1].dnd).toMatchObject({ status: "error", error: "הסכום לא תקין" }); // 400 → not retried as is
-    await sync(request);
+    expect(t.deals[1].dnd).toMatchObject({ status: "error", error: "הסכום לא תקין" }); // 400 → the cron leaves it alone
+    await sync(request); // "sync now" gives rejected deals another go too
     t = await settled(request, uriHTask, (d) => d[0]?.status === "sent");
     expect(t.deals[0].dnd).toMatchObject({ status: "sent", attempts: 2 });
     expect(t.deals[0].dnd.id).toBeTruthy();
-    expect(t.deals[1].dnd.status).toBe("error");
+    expect(t.deals[1].dnd).toMatchObject({ status: "error", attempts: 2 });
     // the retry looked for an already-created deal before posting again (no duplicate)
     const posted = ((await mock(request, "/__requests")) as Rec[]).filter((q) => q.method === "POST" && q.path === "/api/deals" && String(q.body?.clientName).startsWith("FAIL500ONCE"));
     expect(posted).toHaveLength(2); // one failed, one succeeded

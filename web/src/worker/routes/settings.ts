@@ -133,7 +133,7 @@ settingsRoutes.post("/dnd/disconnect", async (c) => {
 });
 
 settingsRoutes.post("/dnd/sync", async (c) => {
-  const result = await syncDndDeals(c.env, c.get("db"));
+  const result = await syncDndDeals(c.env, c.get("db"), { retryErrors: true });
   return c.json({ ok: true, result, dnd: await dndStatus(c.get("db")) });
 });
 

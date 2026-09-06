@@ -1,4 +1,4 @@
-import { and, eq, isNull, like, sql } from "drizzle-orm";
+import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import type { Env } from "./env";
 import type { Db } from "./db/client";
 import { appMeta, tasks, users } from "./db/schema";
@@ -279,7 +279,8 @@ export function dndPayload(deal: Deal, task: { id: number; dueDate: string; titl
     dealType: deal.plusTraining ? "SALES_PLUS_TRAINING" : "SALES_ONLY",
     paymentMethod: deal.method ? DND_PAYMENT_METHOD[deal.method] : undefined,
     agentId,
-    closedAt: task.dueDate,
+    // DND CASH's own form sends the closing date as a full timestamp (midnight UTC), not a bare date.
+    closedAt: `${task.dueDate}T00:00:00.000Z`,
     notes: `${dndMarker(task.id, deal.key ?? "")} מלו"ז יומי · ${assigneeName} · ${task.title}`.slice(0, 500),
   };
   if (isStandingOrder(deal.method)) {
@@ -302,7 +303,10 @@ const ERROR_HE: Record<string, string> = {
 
 function describeError(status: number, data: Record<string, unknown> | null): string {
   const code = typeof data?.error === "string" ? data.error : typeof data?.message === "string" ? data.message : "";
-  return ERROR_HE[code] ?? (code ? `DND CASH ${status}: ${code}` : `DND CASH ${status}`);
+  if (ERROR_HE[code]) return ERROR_HE[code];
+  // Unknown answer: keep what DND CASH actually said, so the reason can be read on the deal.
+  const raw = data ? JSON.stringify(data).slice(0, 240) : "";
+  return `DND CASH ${status}${code ? `: ${code}` : ""}${raw && raw !== `{"error":"${code}"}` && raw !== `{"message":"${code}"}` ? ` · ${raw}` : ""}`;
 }
 
 /** After a failed attempt the deal may already exist in DND CASH: look for our marker on that day. */
@@ -360,15 +364,19 @@ export interface DndSyncResult {
  * Send every deal that is still marked "pending" to DND CASH. Runs from the cron and right after a deal is saved;
  * the lock keeps it to one runner at a time (which also protects the rotating refresh token).
  */
-export async function syncDndDeals(env: Env, db: Db): Promise<DndSyncResult | null> {
+export async function syncDndDeals(env: Env, db: Db, opts: { retryErrors?: boolean } = {}): Promise<DndSyncResult | null> {
   return withLock(db, async () => {
     const result: DndSyncResult = { sent: 0, failed: 0, pending: 0 };
     const a = await getDndAuth(db);
     if (!a) return result;
+    // The cron sends what is pending; "sync now" from the settings screen also gives rejected deals another go.
+    const where = opts.retryErrors
+      ? or(like(tasks.dealsJson, '%"status":"pending"%'), like(tasks.dealsJson, '%"status":"error"%'))
+      : like(tasks.dealsJson, '%"status":"pending"%');
     const rows = await db
       .select()
       .from(tasks)
-      .where(and(isNull(tasks.deletedAt), like(tasks.dealsJson, '%"status":"pending"%')))
+      .where(and(isNull(tasks.deletedAt), where))
       .limit(50)
       .all();
     if (rows.length === 0) return result;
@@ -396,7 +404,8 @@ export async function syncDndDeals(env: Env, db: Db): Promise<DndSyncResult | nu
       let changed = false;
       let authFailed: DndAuthError | null = null;
       for (const d of deals) {
-        if (!d.dnd || d.dnd.status !== "pending" || !d.key) continue;
+        if (!d.dnd || !d.key) continue;
+        if (d.dnd.status !== "pending" && !(opts.retryErrors && d.dnd.status === "error")) continue;
         const attempts = d.dnd.attempts ?? 0;
         if (attempts >= MAX_ATTEMPTS) {
           d.dnd = { ...d.dnd, status: "error", error: "יותר מדי ניסיונות. לבדוק ידנית ב-DND CASH." };
