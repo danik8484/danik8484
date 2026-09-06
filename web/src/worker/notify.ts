@@ -329,7 +329,7 @@ export async function morningReportPreview(env: Env, db: Db): Promise<{ today: s
 /* Admin feed: every change, with full details, to the admin's Telegram */
 /* ------------------------------------------------------------------ */
 
-export type AdminEventKind = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder";
+export type AdminEventKind = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder" | "clarify";
 
 const KIND_LABEL: Record<AdminEventKind, string> = {
   created: "➕ משימה חדשה",
@@ -341,6 +341,7 @@ const KIND_LABEL: Record<AdminEventKind, string> = {
   photo: "📷 תמונה נוספה",
   photo_removed: "📷 תמונה הוסרה",
   reminder: "⏰ תזכורת נקבעה",
+  clarify: "❓ צריך חידוד",
 };
 
 const STATUS_HE: Record<string, string> = { open: "פתוח", in_progress: "בתהליך", done: "הושלם ✅" };

@@ -36,6 +36,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const [reminderValue, setReminderValue] = useState("");
   const [reminderEvery, setReminderEvery] = useState<number>(30);
   const [nudged, setNudged] = useState(false);
+  const [clarifyQ, setClarifyQ] = useState("");
+  const [clarified, setClarified] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -73,6 +75,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setReason("");
     setReminderOpen(false);
     setNudged(false);
+    setClarified(false);
+    setClarifyQ("");
     load().catch((e) => setError((e as Error).message));
   }, [load]);
 
@@ -126,6 +130,39 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     try {
       await api.nudge(task.id);
       setNudged(true);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** One tap: make the task urgent (or take the urgency off). */
+  async function toggleUrgent() {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.updateTask(task.id, { priority: task.priority === "urgent" ? "normal" : "urgent" });
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** "צריך חידוד": ask whoever gave me this task what exactly is wanted. */
+  async function sendClarify() {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.clarify(task.id, clarifyQ);
+      setClarified(true);
+      setClarifyQ("");
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -531,6 +568,35 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             </div>
           )}
 
+          {!task.deletedAt && task.status !== "done" && editable && !task.recurringId && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50/50 p-3" data-testid="urgent">
+              <span className="text-sm text-ink-700">{task.priority === "urgent" ? "🚨 המשימה מסומנת כדחופה" : "🚨 לסמן כדחופה – עולה לראש הרשימה ומי שהמשימה שלו מקבל הודעה"}</span>
+              <Button variant="secondary" className="shrink-0 px-3 py-1.5" disabled={busy} onClick={toggleUrgent} data-testid="urgent-toggle">
+                {task.priority === "urgent" ? "בטל דחיפות" : "הפוך לדחופה"}
+              </Button>
+            </div>
+          )}
+
+          {!task.deletedAt && task.status !== "done" && task.assigneeId === s.user.id && task.createdById !== s.user.id && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3" data-testid="clarify">
+              <div className="text-sm text-ink-700">❓ לא בטוח מה בדיוק צריך? {s.nameOf(task.createdById)} יקבל הודעה שצריך חידוד.</div>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  className={inputCls}
+                  placeholder="מה לא ברור? (לא חובה)"
+                  value={clarifyQ}
+                  onChange={(e) => setClarifyQ(e.target.value)}
+                  maxLength={500}
+                  disabled={busy || clarified}
+                  data-testid="clarify-text"
+                />
+                <Button variant="secondary" className="shrink-0 px-3 py-1.5" disabled={busy || clarified} onClick={sendClarify} data-testid="clarify-button">
+                  {clarified ? "נשלח ✓" : "צריך חידוד"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {!task.deletedAt && task.status !== "done" && canChangeStatus && (
             <div className="rounded-xl border border-slate-200 p-3" data-testid="reminder">
               <div className="flex items-center justify-between gap-2">
@@ -701,6 +767,8 @@ export function eventText(ev: TaskEvent): string {
       return "מחק תמונה";
     case "reminder":
       return "תזכורת";
+    case "clarify":
+      return "ביקש חידוד";
     default:
       return ev.type;
   }

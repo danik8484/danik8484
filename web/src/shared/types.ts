@@ -64,7 +64,8 @@ export interface DealsResponse {
 export const REMINDER_INTERVALS = [30, 60, 120, 180, 1440] as const;
 export const REMINDER_INTERVAL_LABEL: Record<number, string> = { 30: "חצי שעה", 60: "שעה", 120: "שעתיים", 180: "3 שעות", 1440: "פעם ביום" };
 
-export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder";
+/** clarify = the person the task belongs to asked whoever gave it what exactly is wanted ("צריך חידוד"). */
+export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder" | "clarify";
 
 export interface PublicUser {
   id: number;

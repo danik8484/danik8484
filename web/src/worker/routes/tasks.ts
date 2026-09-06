@@ -402,6 +402,50 @@ taskRoutes.post("/:id/nudge", async (c) => {
   return c.json({ ok: true, delivered });
 });
 
+/** "צריך חידוד": the person the task belongs to is not sure what is wanted, so whoever gave it hears right away. At most once every two minutes. */
+taskRoutes.post("/:id/clarify", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user");
+  const id = int(c.req.param("id"));
+  if (id === null) return c.json({ error: "לא נמצא" }, 404);
+  const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
+  if (!row) return c.json({ error: "לא נמצא" }, 404);
+  if (!canOpenTask(toPublicUser(me, false), row, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  if (row.assigneeId !== me.id) return c.json({ error: "חידוד מבקש רק מי שהמשימה שלו" }, 400);
+  if (row.createdById === me.id) return c.json({ error: "את המשימה הזו נתת לעצמך" }, 400);
+  if (row.status === "done") return c.json({ error: "המשימה כבר הושלמה" }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { question?: unknown };
+  const question = typeof body.question === "string" ? body.question.trim().slice(0, 500) : "";
+  const team = c.get("team");
+  const creator = team.find((u) => u.id === row.createdById);
+  if (!creator || creator.active !== 1) return c.json({ error: "מי שנתן את המשימה כבר לא בצוות – פנה למנהל" }, 400);
+  const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const recent = await db
+    .select({ id: taskEvents.id })
+    .from(taskEvents)
+    .where(and(eq(taskEvents.taskId, id), eq(taskEvents.type, "clarify"), eq(taskEvents.actorId, me.id), gte(taskEvents.createdAt, since)))
+    .get();
+  if (recent) return c.json({ error: "בקשת חידוד נשלחה לפני פחות משתי דקות. חכה רגע." }, 429);
+  const note = question ? `צריך חידוד: ${question}` : "צריך חידוד";
+  await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "clarify", note }).run();
+  const origin = new URL(c.req.url).origin;
+  let delivered: "push" | "whatsapp" | "both" | "none" = "none";
+  try {
+    delivered = await notifyUser(c.env, db, creator.id, {
+      title: `❓ צריך חידוד: ${row.title}`,
+      body: `${shortName(me.name, team, me.id)} לא בטוח מה צריך לעשות${question ? `: ${question}` : ""} · ליום ${row.dueDate.slice(8, 10)}.${row.dueDate.slice(5, 7)}`,
+      url: `${origin}/?task=${id}`,
+      tag: `clarify-${id}`,
+    });
+  } catch (e) {
+    console.error("clarify failed", e);
+  }
+  // No device and no WhatsApp: fall back to the batched digest so the question is not lost.
+  if (delivered === "none") await queueTaskNotification(db, creator.id, me.id, id);
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "clarify", { extra: `${note} (נשאל ${creator.name})` }));
+  return c.json({ ok: true, delivered });
+});
+
 taskRoutes.patch("/:id", async (c) => {
   const db = c.get("db");
   const me = c.get("user");
@@ -487,6 +531,25 @@ taskRoutes.patch("/:id", async (c) => {
     await queueTaskNotification(db, reassignedTo, me.id, id);
   }
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
+  // A task that just became urgent: the person it belongs to hears right away (not when they made it urgent themselves, and not on a finished task).
+  const nowUrgent = patch.priority === "urgent" && row.priority !== "urgent";
+  const urgentFor = updated!.assigneeId;
+  if (nowUrgent && urgentFor !== me.id && updated!.status !== "done" && reassignedTo === null) {
+    const team = c.get("team");
+    const origin = new URL(c.req.url).origin;
+    let delivered: "push" | "whatsapp" | "both" | "none" = "none";
+    try {
+      delivered = await notifyUser(c.env, db, urgentFor, {
+        title: `🚨 המשימה הפכה לדחופה: ${row.title}`,
+        body: `${describeTask(updated!, team)} · סומנה כדחופה על ידי ${shortName(me.name, team, me.id)}`,
+        url: `${origin}/?task=${id}`,
+        tag: `urgent-${id}`,
+      });
+    } catch (e) {
+      console.error("urgent notify failed", e);
+    }
+    if (delivered === "none") await queueTaskNotification(db, urgentFor, me.id, id);
+  }
   c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, reassignedTo !== null ? "reassigned" : "edited", { extra: [reassignNote, ...changes].filter(Boolean).join(" · ") || undefined }));
   return c.json({ ok: true, task: toTask(updated!) });
 });

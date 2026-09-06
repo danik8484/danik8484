@@ -53,6 +53,7 @@ export const api = {
   deleteTask: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/tasks/${id}`, { reason }),
   setReminder: (id: number, reminderAt: string | null, everyMin?: number) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/reminder`, { reminderAt, everyMin }),
   nudge: (id: number) => request<{ ok: true; delivered: "push" | "whatsapp" | "both" | "none" }>("POST", `/api/tasks/${id}/nudge`),
+  clarify: (id: number, question: string) => request<{ ok: true; delivered: "push" | "whatsapp" | "both" | "none" }>("POST", `/api/tasks/${id}/clarify`, { question }),
   morningPreview: () => request<{ ok: true; today: string; time: string; people: { userId: number; name: string; sentToday: boolean; lines: string[] }[] }>("GET", "/api/settings/morning-report/preview"),
   settings: () => request<ClientSettings>("GET", "/api/settings"),
   saveSettings: (input: Partial<AppSettings>) => request<{ ok: true; settings: ClientSettings }>("PUT", "/api/settings", input),

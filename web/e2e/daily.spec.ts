@@ -136,6 +136,96 @@ test("morning report: once a day (not on Saturday), each person's open tasks for
   expect((await request.put("/api/settings", { data: { morningReportTime: "10:00" } })).ok()).toBeTruthy();
 });
 
+test("clarify: the person the task belongs to asks whoever gave it – not the giver, not twice in two minutes, not when done", async ({ request }) => {
+  await apiLogin(request, ADMIN);
+  const d = await today(request);
+  const id = (await (await request.post("/api/tasks", { data: { title: `חידוד ${tag}`, assigneeId: URI_H, dueDate: d } })).json()).task.id;
+  const own = (await (await request.post("/api/tasks", { data: { title: `לעצמי ${tag}`, assigneeId: ADMIN, dueDate: d } })).json()).task.id;
+  // whoever gave the task cannot ask for clarification on it
+  expect((await request.post(`/api/tasks/${id}/clarify`, { data: { question: "x" } })).status()).toBe(400);
+  // a task you gave yourself has nobody to ask
+  expect((await request.post(`/api/tasks/${own}/clarify`, { data: {} })).status()).toBe(400);
+  const before = await pending(request);
+  // the person it belongs to can; the admin has no device or WhatsApp here, so it lands in the digest queue
+  await apiLogin(request, URI_H);
+  const r = await request.post(`/api/tasks/${id}/clarify`, { data: { question: "איזה לקוח בדיוק?" } });
+  expect(r.ok()).toBeTruthy();
+  expect((await r.json()).delivered).toBe("none");
+  expect((await request.post(`/api/tasks/${id}/clarify`, { data: {} })).status()).toBe(429);
+  const detail = await (await request.get(`/api/tasks/${id}`)).json();
+  const ev = detail.events.find((e: { type: string }) => e.type === "clarify");
+  expect(ev).toBeTruthy();
+  expect(ev.note).toBe("צריך חידוד: איזה לקוח בדיוק?");
+  expect(ev.actorId).toBe(URI_H);
+  await apiLogin(request, ADMIN);
+  expect(await pending(request)).toBe(before + 1);
+  // a finished task is not clarified
+  expect((await request.post(`/api/tasks/${id}/status`, { data: { status: "done", note: "" } })).ok()).toBeTruthy();
+  await apiLogin(request, URI_H);
+  expect((await request.post(`/api/tasks/${id}/clarify`, { data: {} })).status()).toBe(400);
+  await apiLogin(request, ADMIN);
+  for (const t of [id, own]) expect((await request.delete(`/api/tasks/${t}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
+test("in the browser: the clarify block shows only on a task someone else gave me, and sends", async ({ browser, request }) => {
+  await apiLogin(request, 2); // Ron gives the admin a task
+  const d = await today(request);
+  const id = (await (await request.post("/api/tasks", { data: { title: `חידוד בדפדפן ${tag}`, assigneeId: ADMIN, dueDate: d } })).json()).task.id;
+  await apiLogin(request, ADMIN);
+  const mine = (await (await request.post("/api/tasks", { data: { title: `שלי בדפדפן ${tag}`, assigneeId: ADMIN, dueDate: d } })).json()).task.id;
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await uiLogin(page, "דני שקנבסקי");
+  await page.getByTestId(`task-${mine}`).first().click();
+  await expect(page.getByTestId("clarify")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByTestId(`task-${id}`).first().click();
+  await expect(page.getByTestId("clarify")).toBeVisible();
+  await page.getByTestId("clarify-text").fill("איזה חדר?");
+  await page.getByTestId("clarify-button").click();
+  await expect(page.getByTestId("clarify-button")).toHaveText("נשלח ✓");
+  await expect(page.getByText("צריך חידוד: איזה חדר?")).toBeVisible();
+  await ctx.close();
+  for (const t of [id, mine]) expect((await request.delete(`/api/tasks/${t}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
+test("make urgent: one tap, only for whoever may edit, and the person it belongs to is told right away", async ({ browser, request }) => {
+  await apiLogin(request, ADMIN);
+  const d = await today(request);
+  const id = (await (await request.post("/api/tasks", { data: { title: `לדחופה ${tag}`, assigneeId: URI_H, dueDate: d } })).json()).task.id;
+  await apiLogin(request, URI_H);
+  const before = await pending(request);
+  // the person it belongs to may not change its importance
+  expect((await request.patch(`/api/tasks/${id}`, { data: { priority: "urgent" } })).status()).toBe(403);
+  await apiLogin(request, ADMIN);
+  const r = await (await request.patch(`/api/tasks/${id}`, { data: { priority: "urgent" } })).json();
+  expect(r.task.priority).toBe("urgent");
+  // urgent → an immediate message; with no device or WhatsApp here it lands in the digest queue
+  await apiLogin(request, URI_H);
+  expect(await pending(request)).toBe(before + 1);
+  // taking the urgency off does not message again
+  await apiLogin(request, ADMIN);
+  expect((await (await request.patch(`/api/tasks/${id}`, { data: { priority: "normal" } })).json()).task.priority).toBe("normal");
+  await apiLogin(request, URI_H);
+  expect(await pending(request)).toBe(before + 1);
+
+  // in the browser: one tap on my own task moves it to the urgent section
+  await apiLogin(request, ADMIN);
+  const mine = (await (await request.post("/api/tasks", { data: { title: `דחופה בלחיצה ${tag}`, assigneeId: ADMIN, dueDate: d } })).json()).task.id;
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await uiLogin(page, "דני שקנבסקי");
+  await expect(page.getByTestId("group-new-1").getByText(`דחופה בלחיצה ${tag}`)).toBeVisible();
+  await page.getByTestId(`task-${mine}`).first().click();
+  await expect(page.getByTestId("urgent-toggle")).toHaveText("הפוך לדחופה");
+  await page.getByTestId("urgent-toggle").click();
+  await expect(page.getByTestId("urgent-toggle")).toHaveText("בטל דחיפות");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("group-urgent-1").getByText(`דחופה בלחיצה ${tag}`)).toBeVisible();
+  await ctx.close();
+  for (const t of [id, mine]) expect((await request.delete(`/api/tasks/${t}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
 test("in the browser: the push button and the interval picker are there", async ({ browser, request }) => {
   await apiLogin(request, ADMIN);
   const d = await today(request);
