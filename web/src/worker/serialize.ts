@@ -8,11 +8,30 @@ export function parseDeals(json: string | null): Deal[] {
     if (!Array.isArray(arr)) return [];
     return arr
       .filter((d) => d && typeof d.name === "string")
-      .map((d) => ({
-        name: String(d.name),
-        amount: typeof d.amount === "number" && Number.isFinite(d.amount) ? d.amount : 0,
-        method: (PAYMENT_METHODS as readonly string[]).includes(d.method) ? (d.method as PaymentMethod) : "",
-      }));
+      .map((d) => {
+        const deal: Deal = {
+          name: String(d.name),
+          amount: typeof d.amount === "number" && Number.isFinite(d.amount) ? d.amount : 0,
+          method: (PAYMENT_METHODS as readonly string[]).includes(d.method) ? (d.method as PaymentMethod) : "",
+        };
+        if (typeof d.key === "string" && /^[a-f0-9]{8,32}$/.test(d.key)) deal.key = d.key;
+        if (d.plusTraining === true) deal.plusTraining = true;
+        if (typeof d.months === "number" && Number.isInteger(d.months) && d.months > 0) deal.months = d.months;
+        if (typeof d.firstDue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.firstDue)) deal.firstDue = d.firstDue;
+        if (typeof d.upfront === "number" && Number.isFinite(d.upfront) && d.upfront > 0) deal.upfront = d.upfront;
+        const dnd = d.dnd;
+        if (dnd && typeof dnd === "object" && ["pending", "sent", "error"].includes(dnd.status)) {
+          deal.dnd = {
+            status: dnd.status,
+            ...(typeof dnd.id === "string" ? { id: dnd.id } : {}),
+            ...(typeof dnd.sentAt === "string" ? { sentAt: dnd.sentAt } : {}),
+            ...(typeof dnd.attempts === "number" ? { attempts: dnd.attempts } : {}),
+            ...(typeof dnd.error === "string" ? { error: dnd.error } : {}),
+            ...(dnd.stale === true ? { stale: true } : {}),
+          };
+        }
+        return deal;
+      });
   } catch {
     return [];
   }

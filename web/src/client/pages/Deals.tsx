@@ -4,9 +4,8 @@ import { api } from "../api";
 import { useSession } from "../state";
 import { Empty, ErrorText, Spinner, inputCls } from "../components/ui";
 import TaskSheet from "../components/TaskSheet";
-import { fmtDateShort } from "../format";
+import { DND_STATUS_LABEL, fmtDateShort } from "../format";
 
-// TODO(DND CASH): this page is the natural place to sync/export deals into the DND CASH system.
 export default function Deals() {
   const s = useSession();
   const [from, setFrom] = useState(s.today.slice(0, 8) + "01");
@@ -88,6 +87,7 @@ export default function Deals() {
                     <th className="px-3 py-2 text-start font-semibold">לקוח</th>
                     <th className="px-3 py-2 text-start font-semibold">סכום</th>
                     <th className="px-3 py-2 text-start font-semibold">אמצעי תשלום</th>
+                    <th className="px-3 py-2 text-start font-semibold">DND CASH</th>
                     {visible.length > 1 && <th className="px-3 py-2 text-start font-semibold">איש צוות</th>}
                   </tr>
                 </thead>
@@ -97,7 +97,15 @@ export default function Deals() {
                       <td className="px-3 py-2 whitespace-nowrap">{fmtDateShort(d.date)}</td>
                       <td className="px-3 py-2 font-semibold text-ink-900">{d.name}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{fmt(d.amount)} ₪</td>
-                      <td className="px-3 py-2">{d.method ? PAYMENT_METHOD_LABEL[d.method] : "לא צוין"}</td>
+                      <td className="px-3 py-2">
+                        {d.method ? PAYMENT_METHOD_LABEL[d.method] : "לא צוין"}
+                        {d.months ? ` · ${d.months} חודשים` : ""}
+                        {d.plusTraining ? " · מכירה + אימון" : ""}
+                      </td>
+                      <td className={`px-3 py-2 text-xs ${d.dnd?.status === "sent" ? "text-emerald-700" : d.dnd?.status === "error" ? "text-red-600" : "text-slate-500"}`} data-testid="deal-dnd">
+                        {d.dnd ? DND_STATUS_LABEL[d.dnd.status] : "—"}
+                        {d.dnd?.stale ? " · שונה אחרי השליחה" : ""}
+                      </td>
                       {visible.length > 1 && <td className="px-3 py-2">{s.nameOf(d.assigneeId)}</td>}
                     </tr>
                   ))}

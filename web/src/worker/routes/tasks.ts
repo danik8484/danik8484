@@ -11,7 +11,9 @@ import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
 import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, canSeeActivityLog, canSeeDeals, isCoordinator, noteRequiredForInProgress } from "@shared/permissions";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type BoardResponse, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, isStandingOrder, type BoardResponse, type Deal, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
+import { getSettings } from "../settings";
+import { getDndAuth, syncDndDeals } from "../dnd";
 import { parseDeals } from "../serialize";
 
 const PRIORITIES: TaskPriority[] = ["urgent", "high", "normal"];
@@ -187,6 +189,7 @@ taskRoutes.post("/:id/status", async (c) => {
   const changed = status !== row.status;
   const patch: Partial<typeof tasks.$inferInsert> = { updatedAt: now };
   const metricNotes: string[] = [];
+  let dndPending = false;
   if (row.kind === "leads") {
     // Calls: a plain count
     if (body.metricCalls !== undefined) {
@@ -199,29 +202,76 @@ taskRoutes.post("/:id/status", async (c) => {
         metricNotes.push(`שיחות: ${v ?? "–"}`);
       }
     }
-    // Closed deals: a list of {name, amount}; the count is derived.
-    // TODO(DND CASH): push these deals into the DND CASH system once that integration is built.
+    // Closed deals: a list of {name, amount, method, ...}; the count is derived. Each row keeps a stable key so a
+    // re-save keeps its DND CASH link. New rows are marked "pending" and sent to DND CASH right after this request.
     if (body.deals !== undefined) {
       if (!Array.isArray(body.deals) || body.deals.length > 50) return c.json({ error: "רשימת נסלקים לא תקינה" }, 400);
-      const deals: { name: string; amount: number; method: PaymentMethod }[] = [];
+      const settings = await getSettings(db, c.env);
+      const plusAllowed = settings.dndPlusTrainingUserIds.includes(row.assigneeId);
+      const dndOn = !!(await getDndAuth(db));
+      const existing = parseDeals(row.dealsJson);
+      const byKey = new Map(existing.filter((d) => d.key).map((d) => [d.key as string, d]));
+      const deals: Deal[] = [];
       for (const d of body.deals as unknown[]) {
         const o = (d ?? {}) as Record<string, unknown>;
         const name = str(o.name, 100);
         if (!name || name.split(/\s+/).length < 2) return c.json({ error: "חובה למלא שם מלא (שם פרטי ומשפחה) לכל נסלק" }, 400);
         const n = typeof o.amount === "number" ? o.amount : o.amount === "" || o.amount === null || o.amount === undefined ? NaN : Number(o.amount);
         if (!Number.isFinite(n) || n <= 0 || n > 10_000_000) return c.json({ error: `חובה למלא סכום לנסלק ${name}` }, 400);
+        const amount = Math.round(n * 100) / 100;
         const method = o.method as PaymentMethod;
         if (!(PAYMENT_METHODS as readonly string[]).includes(method)) return c.json({ error: `חובה לבחור אמצעי תשלום לנסלק ${name}` }, 400);
-        deals.push({ name, amount: Math.round(n * 100) / 100, method });
+        const keyRaw = typeof o.key === "string" && /^[a-f0-9]{8,32}$/.test(o.key) ? o.key : null;
+        const prev = keyRaw ? byKey.get(keyRaw) : undefined;
+        const key = prev ? (keyRaw as string) : crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        const plusTraining = o.plusTraining === true;
+        if (plusTraining && !plusAllowed) {
+          const allowed = settings.dndPlusTrainingUserIds.map((id) => c.get("team").find((u) => u.id === id)?.name).filter(Boolean);
+          return c.json({ error: `"מכירה + אימון" אפשר לסמן רק אצל: ${allowed.length ? allowed.join(", ") : "אף אחד (ראה הגדרות)"}` }, 400);
+        }
+        let months: number | null = null;
+        let firstDue: string | null = null;
+        let upfront: number | null = null;
+        if (isStandingOrder(method)) {
+          const m = int(o.months);
+          if (m === null || m < 1 || m > 120) return c.json({ error: `חובה למלא מספר חודשים (1–120) להוראת הקבע של ${name}` }, 400);
+          months = m;
+          if (o.firstDue !== undefined && o.firstDue !== null && o.firstDue !== "") {
+            if (!isIsoDate(o.firstDue)) return c.json({ error: `תאריך תשלום ראשון לא תקין לנסלק ${name}` }, 400);
+            firstDue = o.firstDue as string;
+          }
+          if (o.upfront !== undefined && o.upfront !== null && o.upfront !== "") {
+            const u = Number(o.upfront);
+            if (!Number.isFinite(u) || u < 0 || u >= amount) return c.json({ error: `מקדמה לא תקינה לנסלק ${name} (חייבת להיות קטנה מהסכום)` }, 400);
+            upfront = u > 0 ? Math.round(u * 100) / 100 : null;
+          }
+        }
+        const deal: Deal = { key, name, amount, method, ...(plusTraining ? { plusTraining: true } : {}), ...(months !== null ? { months } : {}), ...(firstDue ? { firstDue } : {}), ...(upfront !== null ? { upfront } : {}) };
+        if (prev?.dnd) {
+          // DND CASH is never updated from here: a deal that was sent stays "sent" (flagged if edited); a rejected one is retried once edited.
+          const edited =
+            prev.name !== name || prev.amount !== amount || prev.method !== method || !!prev.plusTraining !== plusTraining || (prev.months ?? null) !== months || (prev.firstDue ?? null) !== firstDue || (prev.upfront ?? null) !== upfront;
+          if (prev.dnd.status === "sent") deal.dnd = { ...prev.dnd, ...(prev.dnd.stale || edited ? { stale: true } : {}) };
+          else if (prev.dnd.status === "error" && edited) deal.dnd = { status: "pending", attempts: 0 };
+          else deal.dnd = prev.dnd;
+        } else if (dndOn) deal.dnd = { status: "pending", attempts: 0 };
+        deals.push(deal);
       }
+      const shown = (d: Deal) => ({ name: d.name, amount: d.amount, method: d.method, plusTraining: !!d.plusTraining, months: d.months ?? null, firstDue: d.firstDue ?? null, upfront: d.upfront ?? null });
+      const userChanged = JSON.stringify(deals.map(shown)) !== JSON.stringify(existing.map(shown));
       const json = deals.length ? JSON.stringify(deals) : null;
       if (json !== row.dealsJson) {
         patch.dealsJson = json;
         patch.metricDeals = deals.length ? deals.length : null;
-        metricNotes.push(
-          deals.length ? `נסלקים: ${deals.length} (${deals.map((d) => `${d.name} ${d.amount}₪ ${PAYMENT_METHOD_LABEL[d.method]}`).join(", ")})` : "נסלקים: –",
-        );
+        if (userChanged) {
+          metricNotes.push(
+            deals.length
+              ? `נסלקים: ${deals.length} (${deals.map((d) => `${d.name} ${d.amount}₪ ${PAYMENT_METHOD_LABEL[d.method as PaymentMethod]}${d.months ? ` ×${d.months} חודשים` : ""}${d.plusTraining ? " מכירה+אימון" : ""}`).join(", ")})`
+              : "נסלקים: –",
+          );
+        }
       }
+      dndPending = deals.some((d) => d.dnd?.status === "pending");
     }
   }
   if (status === "in_progress") patch.progressNote = note;
@@ -239,7 +289,7 @@ taskRoutes.post("/:id/status", async (c) => {
     patch.completedDate = null;
     patch.completedById = null;
   }
-  if (!changed && !note && metricNotes.length === 0 && patch.progressNote === undefined) return c.json({ ok: true, task: toTask(row) });
+  if (!changed && !note && metricNotes.length === 0 && patch.progressNote === undefined && patch.dealsJson === undefined) return c.json({ ok: true, task: toTask(row) });
   // Two people closing the same task at once: only the write that sees the status it read gets to log and notify.
   const won = await db.update(tasks).set(patch).where(and(eq(tasks.id, id), eq(tasks.status, row.status), isNull(tasks.deletedAt))).returning({ id: tasks.id }).get();
   if (!won) {
@@ -261,6 +311,8 @@ taskRoutes.post("/:id/status", async (c) => {
   c.executionCtx.waitUntil(
     adminFeedFor(c.env, db, id, me, changed ? "status" : "note", { note: [note ?? "", metricNotes.join(" · ")].filter(Boolean).join(" · "), fromStatus: row.status, toStatus: status }),
   );
+  // New closed deals go to DND CASH right away (the sync also runs every 5 minutes for anything that failed).
+  if (dndPending) c.executionCtx.waitUntil(syncDndDeals(c.env, db).catch((e) => console.error("dnd sync failed", e)));
   // Whoever gave the task hears right away that it is done (unless they closed it themselves).
   if (changed && status === "done" && row.createdById !== me.id) {
     const team = c.get("team");

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, type ClientSettings } from "../api";
 import { Button, ErrorText, Field, Spinner, inputCls } from "../components/ui";
 import { WEEKDAYS_LONG } from "../format";
+import { useSession } from "../state";
 
 export default function Settings() {
+  const session = useSession();
   const [s, setS] = useState<ClientSettings | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
@@ -22,6 +24,10 @@ export default function Settings() {
   const [waLang, setWaLang] = useState("");
   const [times, setTimes] = useState<string[]>([]);
   const [chats, setChats] = useState<{ id: string; name: string }[] | null>(null);
+  const [plusIds, setPlusIds] = useState<number[]>([]);
+  const [dndUrl, setDndUrl] = useState("");
+  const [dndToken, setDndToken] = useState("");
+  const [showDndAdvanced, setShowDndAdvanced] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -38,6 +44,8 @@ export default function Settings() {
       setWaLoginTemplate(data.whatsappLoginTemplate);
       setWaLang(data.whatsappLang);
       setTimes(data.reminderTimes);
+      setPlusIds(data.dndPlusTrainingUserIds);
+      setDndUrl(data.dndBaseUrl);
       setTgToken("");
       setWaToken("");
     } catch (e) {
@@ -79,6 +87,8 @@ export default function Settings() {
         whatsappLoginTemplate: waLoginTemplate,
         whatsappLang: waLang,
         reminderTimes: times,
+        dndBaseUrl: dndUrl,
+        dndPlusTrainingUserIds: plusIds,
       });
       await load();
     });
@@ -197,6 +207,88 @@ export default function Settings() {
         <Button type="button" variant="secondary" disabled={busy || !s.whatsappConfigured} onClick={() => run("נשלחה הודעת בדיקה לוואטסאפ שלך", () => api.whatsappTest())}>
           שלח בדיקה לוואטסאפ שלי
         </Button>
+      </section>
+
+      <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm" data-testid="dnd-section">
+        <h2 className="text-base font-bold text-ink-900">DND CASH (שכר ועמלות)</h2>
+        <p className="text-xs text-slate-600">
+          נסלק שנרשם במשימת לידים נשלח אוטומטית ל-DND CASH כעסקה חדשה (ממתינה לאישור שם). מכאן רק מוסיפים: שום דבר ב-DND CASH לא משתנה ולא נמחק.
+        </p>
+        <p className="text-sm" data-testid="dnd-status">
+          {s.dnd.connected ? (
+            <>
+              מחובר כ-<b>{s.dnd.user?.displayName || "?"}</b>
+              {s.dnd.agents.length > 0 && <> · סוכנים ב-DND CASH: {s.dnd.agents.map((a) => a.displayName).join(", ")}</>}
+              {s.dnd.lastSyncAt && <> · סנכרון אחרון {new Date(s.dnd.lastSyncAt).toLocaleString("he-IL")}</>}
+            </>
+          ) : (
+            "לא מחובר"
+          )}
+          {s.dnd.lastError && <span className="text-red-600"> · שגיאה: {s.dnd.lastError}</span>}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" disabled={busy || !s.dnd.connected} onClick={() => run("החיבור ל-DND CASH תקין", async () => { await api.dndTest(); await load(); })}>
+            בדיקת חיבור
+          </Button>
+          <Button type="button" variant="secondary" disabled={busy || !s.dnd.connected} onClick={() => run("הסנכרון ל-DND CASH רץ", async () => { await api.dndSync(); await load(); })}>
+            סנכרון עכשיו
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setShowDndAdvanced((v) => !v)}>
+            {showDndAdvanced ? "הסתרת פרטי חיבור" : "התחברות / החלפת חיבור"}
+          </Button>
+        </div>
+        <div>
+          <span className="mb-1 block text-sm font-semibold text-ink-700">מי רשאי לסמן "מכירה + אימון" (20%)</span>
+          <div className="flex flex-wrap gap-3">
+            {session.users
+              .filter((u) => u.active)
+              .map((u) => (
+                <label key={u.id} className="flex items-center gap-1.5 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-brand-600"
+                    checked={plusIds.includes(u.id)}
+                    onChange={(e) => setPlusIds((ids) => (e.target.checked ? [...ids, u.id] : ids.filter((x) => x !== u.id)))}
+                    data-testid={`plus-${u.id}`}
+                  />
+                  {u.name}
+                </label>
+              ))}
+          </div>
+        </div>
+        {showDndAdvanced && (
+          <div className="space-y-3 rounded-xl border border-slate-200 p-3">
+            <Field label="כתובת DND CASH">
+              <input dir="ltr" className={inputCls} value={dndUrl} onChange={(e) => setDndUrl(e.target.value)} />
+            </Field>
+            <Field label="טוקן רענון של DND CASH" hint="מתקבל בכניסה חד-פעמית ל-DND CASH (קוד למייל). מתחלף לבד אחרי כל שימוש, לכן מזינים אותו פעם אחת בלבד.">
+              <textarea dir="ltr" rows={3} className={inputCls} value={dndToken} onChange={(e) => setDndToken(e.target.value)} data-testid="dnd-token" />
+            </Field>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || !dndToken.trim()}
+                onClick={() =>
+                  run("DND CASH מחובר", async () => {
+                    await api.saveSettings({ dndBaseUrl: dndUrl });
+                    await api.dndConnect(dndToken.trim());
+                    setDndToken("");
+                    await load();
+                  })
+                }
+                data-testid="dnd-connect"
+              >
+                התחברות
+              </Button>
+              {s.dnd.connected && (
+                <Button type="button" variant="ghost" className="text-red-600" disabled={busy} onClick={() => confirm("לנתק את DND CASH? נסלקים חדשים לא יישלחו.") && run("DND CASH נותק", async () => { await api.dndDisconnect(); await load(); })}>
+                  ניתוק
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">

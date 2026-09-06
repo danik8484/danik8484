@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type Attachment, type Deal, type PaymentMethod, type Task, type TaskEvent, type TaskStatus } from "@shared/types";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, isStandingOrder, type Attachment, type Deal, type DealDnd, type PaymentMethod, type Task, type TaskEvent, type TaskStatus } from "@shared/types";
 
-type DealDraft = { name: string; amount: string; method: PaymentMethod | "" };
+type DealDraft = { key?: string; name: string; amount: string; method: PaymentMethod | ""; plusTraining: boolean; months: string; firstDue: string; upfront: string; dnd?: DealDnd };
+const EMPTY_DEAL: DealDraft = { name: "", amount: "", method: "", plusTraining: false, months: "", firstDue: "", upfront: "" };
 import { canAttachPhoto, canEditOrDelete, canManage, canMarkDone, noteRequiredForInProgress, taskTier } from "@shared/permissions";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Modal, PersonTag, Spinner, StatusBadge, inputCls } from "./ui";
 import TaskForm from "./TaskForm";
-import { PRIORITY_LABEL, STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime, fromLocalInput, toLocalInput } from "../format";
+import { PRIORITY_LABEL, STATUS_LABEL, daysBetween, fmtDateShort, fmtDateTime, fromLocalInput, toLocalInput, DND_STATUS_LABEL } from "../format";
 import { makeThumb, prepareImage } from "../image";
 
 interface Props {
@@ -46,7 +47,19 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setPhotos(res.attachments);
     setStatus(res.task.status);
     setNote(res.task.status === "in_progress" ? res.task.progressNote : "");
-    setDeals(res.task.deals.map((d) => ({ name: d.name, amount: d.amount ? String(d.amount) : "", method: d.method })));
+    setDeals(
+      res.task.deals.map((d) => ({
+        key: d.key,
+        name: d.name,
+        amount: d.amount ? String(d.amount) : "",
+        method: d.method,
+        plusTraining: !!d.plusTraining,
+        months: d.months ? String(d.months) : "",
+        firstDue: d.firstDue ?? "",
+        upfront: d.upfront ? String(d.upfront) : "",
+        dnd: d.dnd,
+      })),
+    );
     setDealsOpen(res.task.deals.length > 0);
     setCalls(res.task.metricCalls == null ? "" : String(res.task.metricCalls));
   }, [taskId]);
@@ -67,9 +80,23 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const tier = task ? taskTier(task, s.users) : 1;
   const cleanDeals: Deal[] = deals
     .filter((d) => d.name.trim() !== "" || d.amount !== "" || d.method !== "")
-    .map((d) => ({ name: d.name.trim(), amount: d.amount === "" ? 0 : Number(d.amount), method: d.method }));
-  const dealsIncomplete = cleanDeals.some((d) => d.name.split(/\s+/).length < 2 || !(d.amount > 0) || !d.method);
-  const metricsDirty = task ? task.kind === "leads" && (JSON.stringify(cleanDeals) !== JSON.stringify(task.deals) || calls !== (task.metricCalls == null ? "" : String(task.metricCalls))) : false;
+    .map((d) => ({
+      ...(d.key ? { key: d.key } : {}),
+      name: d.name.trim(),
+      amount: d.amount === "" ? 0 : Number(d.amount),
+      method: d.method,
+      plusTraining: d.plusTraining,
+      months: isStandingOrder(d.method) && d.months !== "" ? Number(d.months) : null,
+      firstDue: isStandingOrder(d.method) && d.firstDue ? d.firstDue : null,
+      upfront: isStandingOrder(d.method) && d.upfront !== "" ? Number(d.upfront) : null,
+    }));
+  const dealsIncomplete = cleanDeals.some((d) => d.name.split(/\s+/).length < 2 || !(d.amount > 0) || !d.method || (isStandingOrder(d.method) && !((d.months ?? 0) >= 1)));
+  // What the person can change; the DND CASH state and the row keys are not theirs to edit.
+  const shownDeal = (d: Deal) => ({ name: d.name, amount: d.amount, method: d.method, plusTraining: !!d.plusTraining, months: d.months ?? null, firstDue: d.firstDue ?? null, upfront: d.upfront ?? null });
+  const canPlusTraining = !!task && s.features.plusTrainingUserIds.includes(task.assigneeId);
+  const metricsDirty = task
+    ? task.kind === "leads" && (JSON.stringify(cleanDeals.map(shownDeal)) !== JSON.stringify(task.deals.map(shownDeal)) || calls !== (task.metricCalls == null ? "" : String(task.metricCalls)))
+    : false;
   const statusDirty = task ? status !== task.status || (status === "in_progress" && note.trim() !== task.progressNote) || (status !== "in_progress" && note.trim() !== "") || metricsDirty : false;
 
   async function saveStatus() {
@@ -77,7 +104,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setBusy(true);
     setError("");
     try {
-      if (task.kind === "leads" && dealsIncomplete) throw new Error("לכל נסלק חובה שם מלא, סכום ואמצעי תשלום");
+      if (task.kind === "leads" && dealsIncomplete) throw new Error("לכל נסלק חובה שם מלא, סכום ואמצעי תשלום (ולהוראת קבע גם מספר חודשים)");
       await api.setStatus(task.id, status, note, task.kind === "leads" ? { deals: cleanDeals, metricCalls: calls === "" ? null : Number(calls) } : undefined);
       await load();
       onChanged();
@@ -252,6 +279,9 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                       {task.deals.map((d, i) => (
                         <li key={i}>
                           {d.name} · {d.amount.toLocaleString("he-IL")} ₪{d.method && ` · ${PAYMENT_METHOD_LABEL[d.method]}`}
+                          {d.months ? ` · ${d.months} חודשים` : ""}
+                          {d.plusTraining ? " · מכירה + אימון" : ""}
+                          {d.dnd && <span className={d.dnd.status === "sent" ? "text-emerald-700" : d.dnd.status === "error" ? "text-red-600" : "text-slate-500"}> · {DND_STATUS_LABEL[d.dnd.status]}</span>}
                         </li>
                       ))}
                     </ul>
@@ -321,7 +351,6 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                     <span className="mb-1 block text-sm font-semibold text-ink-700">כמות שיחות</span>
                     <input type="number" inputMode="numeric" min={0} step={1} className={inputCls} value={calls} onChange={(e) => setCalls(e.target.value)} data-testid="metric-calls" />
                   </label>
-                  {/* TODO(DND CASH): connect closed deals to the DND CASH system */}
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3" data-testid="deals-panel">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-ink-700">נסלקים{cleanDeals.length > 0 && ` (${cleanDeals.length})`}</span>
@@ -331,7 +360,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                           className="px-3 py-1.5"
                           onClick={() => {
                             setDealsOpen(true);
-                            if (deals.length === 0) setDeals([{ name: "", amount: "", method: "" }]);
+                            if (deals.length === 0) setDeals([{ ...EMPTY_DEAL }]);
                           }}
                         >
                           + הוספת נסלק
@@ -386,10 +415,76 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                                 </option>
                               ))}
                             </select>
+                            {isStandingOrder(d.method) && (
+                              <div className="mt-2" data-testid={`deal-so-${i}`}>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <label className="block text-xs font-semibold text-slate-600">
+                                    מספר חודשים
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={1}
+                                      max={120}
+                                      className={`${inputCls} mt-1`}
+                                      value={d.months}
+                                      onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, months: e.target.value } : x)))}
+                                      data-testid={`deal-months-${i}`}
+                                    />
+                                  </label>
+                                  <label className="block text-xs font-semibold text-slate-600">
+                                    מקדמה ₪
+                                    <input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min={0}
+                                      className={`${inputCls} mt-1`}
+                                      value={d.upfront}
+                                      onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, upfront: e.target.value } : x)))}
+                                      data-testid={`deal-upfront-${i}`}
+                                    />
+                                  </label>
+                                  <label className="block text-xs font-semibold text-slate-600">
+                                    תשלום ראשון
+                                    <input
+                                      type="date"
+                                      className={`${inputCls} mt-1`}
+                                      value={d.firstDue}
+                                      onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, firstDue: e.target.value } : x)))}
+                                      data-testid={`deal-firstdue-${i}`}
+                                    />
+                                  </label>
+                                </div>
+                                {Number(d.amount) > 0 && Number(d.months) >= 1 && (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {Number(d.months)} תשלומים של {Math.round((Number(d.amount) - (Number(d.upfront) || 0)) / Number(d.months)).toLocaleString("he-IL")} ₪
+                                    {d.firstDue ? "" : " · התשלום הראשון בתאריך המשימה"}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {canPlusTraining && (
+                              <label className="mt-2 flex items-center gap-2 text-sm text-ink-700">
+                                <input
+                                  type="checkbox"
+                                  className="size-4 accent-brand-600"
+                                  checked={d.plusTraining}
+                                  onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, plusTraining: e.target.checked } : x)))}
+                                  data-testid={`deal-plus-${i}`}
+                                />
+                                מכירה + אימון (20%)
+                              </label>
+                            )}
+                            {d.dnd && (
+                              <p className={`mt-1 text-xs ${d.dnd.status === "sent" ? "text-emerald-700" : d.dnd.status === "error" ? "text-red-600" : "text-slate-500"}`} data-testid={`deal-dnd-${i}`}>
+                                {DND_STATUS_LABEL[d.dnd.status]}
+                                {d.dnd.error ? ` · ${d.dnd.error}` : ""}
+                                {d.dnd.stale ? " · שונה אחרי השליחה, לעדכן ידנית ב-DND CASH" : ""}
+                              </p>
+                            )}
                           </div>
                         ))}
-                        {dealsIncomplete && <p className="text-xs text-red-600">לכל נסלק חובה שם מלא, סכום ואמצעי תשלום.</p>}
-                        <button type="button" className="text-sm font-semibold text-brand-700" onClick={() => setDeals((arr) => [...arr, { name: "", amount: "", method: "" }])} data-testid="deal-add">
+                        {dealsIncomplete && <p className="text-xs text-red-600">לכל נסלק חובה שם מלא, סכום ואמצעי תשלום. להוראת קבע גם מספר חודשים.</p>}
+                        <button type="button" className="text-sm font-semibold text-brand-700" onClick={() => setDeals((arr) => [...arr, { ...EMPTY_DEAL }])} data-testid="deal-add">
                           + עוד לקוח
                         </button>
                       </div>

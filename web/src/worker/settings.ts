@@ -23,6 +23,8 @@ export function defaultSettings(env: Env): AppSettings {
     whatsappLoginTemplate: "login_code",
     whatsappLang: env.WHATSAPP_LANG ?? "he",
     reminderTimes: [...DEFAULT_REMINDERS],
+    dndBaseUrl: env.DND_BASE_URL ?? "https://dndcash.oskaraz.com",
+    dndPlusTrainingUserIds: [],
   };
 }
 
@@ -34,6 +36,8 @@ export async function getSettings(db: Db, env: Env): Promise<AppSettings> {
     const stored = JSON.parse(row.value) as Partial<AppSettings>;
     const merged: AppSettings = { ...base, ...stored };
     if (!Array.isArray(merged.reminderTimes) || merged.reminderTimes.length !== 7) merged.reminderTimes = [...DEFAULT_REMINDERS];
+    if (!Array.isArray(merged.dndPlusTrainingUserIds)) merged.dndPlusTrainingUserIds = [];
+    if (typeof merged.dndBaseUrl !== "string" || !merged.dndBaseUrl) merged.dndBaseUrl = base.dndBaseUrl;
     return merged;
   } catch {
     return base;

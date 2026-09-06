@@ -3,7 +3,9 @@ import type { AppEnv } from "../context";
 import { getSettings, saveSettings, mask, DEFAULT_REMINDERS } from "../settings";
 import { sendTelegram, telegramConfigured, telegramRecentChats, TELEGRAM_TOKEN_RE, TELEGRAM_CHAT_RE } from "../telegram";
 import { sendWhatsApp, whatsappConfigured, WA_PHONE_ID_RE, BRIDGE_HOST_RE, bridgeConfigured, metaConfigured } from "../whatsapp";
-import { readJson, str, phone as parsePhone } from "../validate";
+import { readJson, str, phone as parsePhone, int } from "../validate";
+import { DND_DEFAULT_URL, clearDndAuth, dndConnect, dndStatus, dndTest, syncDndDeals } from "../dnd";
+import type { Db } from "../db/client";
 import type { AppSettings } from "@shared/types";
 
 export const settingsRoutes = new Hono<AppEnv>();
@@ -26,7 +28,11 @@ function forClient(s: AppSettings) {
   };
 }
 
-settingsRoutes.get("/", async (c) => c.json(forClient(await getSettings(c.get("db"), c.env))));
+async function clientView(db: Db, s: AppSettings) {
+  return { ...forClient(s), dnd: await dndStatus(db) };
+}
+
+settingsRoutes.get("/", async (c) => c.json(await clientView(c.get("db"), await getSettings(c.get("db"), c.env))));
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -81,8 +87,54 @@ settingsRoutes.put("/", async (c) => {
     }
     next.reminderTimes = times;
   }
+  if (body.dndBaseUrl !== undefined) {
+    const u = str(body.dndBaseUrl, 200, { required: false });
+    if (u === null) return c.json({ error: "כתובת DND CASH ארוכה מדי" }, 400);
+    const trimmed = (u || DND_DEFAULT_URL).replace(/\/+$/, "");
+    const ok = /^https:\/\/[A-Za-z0-9.-]+(:\d{2,5})?$/.test(trimmed) || (c.env.APP_ENV === "development" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d{2,5})?$/.test(trimmed));
+    if (!ok) return c.json({ error: "כתובת DND CASH חייבת להיות https://... בלי נתיב" }, 400);
+    next.dndBaseUrl = trimmed;
+  }
+  if (body.dndPlusTrainingUserIds !== undefined) {
+    if (!Array.isArray(body.dndPlusTrainingUserIds)) return c.json({ error: "רשימת אנשי צוות לא תקינה" }, 400);
+    const ids = body.dndPlusTrainingUserIds.map((v: unknown) => int(v)).filter((v: number | null): v is number => v !== null);
+    const team = c.get("team");
+    if (ids.some((id: number) => !team.some((u) => u.id === id))) return c.json({ error: "איש צוות לא תקין" }, 400);
+    next.dndPlusTrainingUserIds = [...new Set(ids)];
+  }
   await saveSettings(db, next);
-  return c.json({ ok: true, settings: forClient(next) });
+  return c.json({ ok: true, settings: await clientView(db, next) });
+});
+
+/* ---------------- DND CASH (payroll): connection is stored apart from the settings blob ---------------- */
+
+settingsRoutes.post("/dnd/connect", async (c) => {
+  const body = await readJson(c.req.raw);
+  const token = str(body.refreshToken, 4000);
+  if (!token) return c.json({ error: "חסר טוקן רענון של DND CASH" }, 400);
+  try {
+    return c.json({ ok: true, dnd: await dndConnect(c.env, c.get("db"), token) });
+  } catch (e) {
+    return c.json({ error: `החיבור ל-DND CASH נכשל: ${(e as Error).message}` }, 502);
+  }
+});
+
+settingsRoutes.post("/dnd/test", async (c) => {
+  try {
+    return c.json({ ok: true, dnd: await dndTest(c.env, c.get("db")) });
+  } catch (e) {
+    return c.json({ error: `בדיקת DND CASH נכשלה: ${(e as Error).message}` }, 502);
+  }
+});
+
+settingsRoutes.post("/dnd/disconnect", async (c) => {
+  await clearDndAuth(c.get("db"));
+  return c.json({ ok: true, dnd: await dndStatus(c.get("db")) });
+});
+
+settingsRoutes.post("/dnd/sync", async (c) => {
+  const result = await syncDndDeals(c.env, c.get("db"));
+  return c.json({ ok: true, result, dnd: await dndStatus(c.get("db")) });
 });
 
 settingsRoutes.post("/reset-reminders", async (c) => {
@@ -90,7 +142,7 @@ settingsRoutes.post("/reset-reminders", async (c) => {
   const s = await getSettings(db, c.env);
   s.reminderTimes = [...DEFAULT_REMINDERS];
   await saveSettings(db, s);
-  return c.json({ ok: true, settings: forClient(s) });
+  return c.json({ ok: true, settings: await clientView(db, s) });
 });
 
 /** Chats that wrote to the bot recently, to pick the admin chat id. */

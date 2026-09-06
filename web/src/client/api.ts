@@ -1,6 +1,15 @@
 import type { AppSettings, Attachment, AuthConfig, BoardResponse, Deal, DealsResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskPriority, TaskStatus } from "@shared/types";
 
-export type ClientSettings = AppSettings & { telegramConfigured: boolean; whatsappConfigured: boolean; bridgeConfigured: boolean; metaConfigured: boolean };
+export interface DndStatus {
+  connected: boolean;
+  user: { displayName?: string; role?: string; email?: string } | null;
+  agents: { id: string; email: string | null; displayName: string; isActive: boolean }[];
+  lastError: string | null;
+  lastSyncAt: number | null;
+  connectedAt: number | null;
+}
+
+export type ClientSettings = AppSettings & { telegramConfigured: boolean; whatsappConfigured: boolean; bridgeConfigured: boolean; metaConfigured: boolean; dnd: DndStatus };
 
 export class ApiError extends Error {
   status: number;
@@ -49,6 +58,10 @@ export const api = {
   telegramChats: () => request<{ chats: { id: string; name: string }[] }>("GET", "/api/settings/telegram/chats"),
   telegramTest: () => request<{ ok: true }>("POST", "/api/settings/telegram/test"),
   whatsappTest: (phone?: string) => request<{ ok: true }>("POST", "/api/settings/whatsapp/test", { phone }),
+  dndConnect: (refreshToken: string) => request<{ ok: true; dnd: DndStatus }>("POST", "/api/settings/dnd/connect", { refreshToken }),
+  dndTest: () => request<{ ok: true; dnd: DndStatus }>("POST", "/api/settings/dnd/test"),
+  dndDisconnect: () => request<{ ok: true; dnd: DndStatus }>("POST", "/api/settings/dnd/disconnect"),
+  dndSync: () => request<{ ok: true; dnd: DndStatus }>("POST", "/api/settings/dnd/sync"),
   uploadPhoto: async (taskId: number, blob: Blob, name: string, width: number, height: number) => {
     const res = await fetch(`/api/tasks/${taskId}/photos`, {
       method: "POST",

@@ -16,4 +16,5 @@ export interface Env {
   WHATSAPP_TEMPLATE?: string;
   WHATSAPP_LANG?: string;
   APP_URL?: string; // public URL used in notification links
+  DND_BASE_URL?: string; // DND CASH (payroll) – default https://dndcash.oskaraz.com
 }

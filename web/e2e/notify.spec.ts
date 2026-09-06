@@ -92,7 +92,7 @@ test("leads task carries deal/call counts, optional", async ({ request }) => {
     expect(r.status()).toBe(200);
     const detail = await (await request.get(`/api/tasks/${inst.id}`)).json();
     expect(detail.task.metricDeals).toBe(3);
-    expect(detail.task.deals).toEqual([
+    expect(detail.task.deals).toMatchObject([
       { name: "דוד לוי", amount: 1200, method: "credit_card" },
       { name: "מיה כהן", amount: 800, method: "cash" },
       { name: "יוסי אברהם", amount: 450.5, method: "paypal" },

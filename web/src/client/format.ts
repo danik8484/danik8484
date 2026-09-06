@@ -1,4 +1,10 @@
-import type { TaskStatus, Role, TaskPriority } from "@shared/types";
+import type { DndSyncStatus, TaskStatus, Role, TaskPriority } from "@shared/types";
+
+export const DND_STATUS_LABEL: Record<DndSyncStatus, string> = {
+  pending: "⏳ ממתין לשליחה ל-DND CASH",
+  sent: "✓ נשלח ל-DND CASH",
+  error: "⚠️ לא נשלח ל-DND CASH",
+};
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   open: "פתוח",

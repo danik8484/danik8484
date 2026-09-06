@@ -3,6 +3,8 @@ import type { AppEnv } from "./context";
 import { getDb } from "./db/client";
 import { getSessionUser } from "./auth";
 import { loadTeam, publicTeam, visibleIdsFor } from "./team";
+import { getSettings } from "./settings";
+import { getDndAuth, syncDndDeals } from "./dnd";
 import { toPublicUser } from "./serialize";
 import { localDate } from "./dates";
 import { authRoutes } from "./routes/auth";
@@ -67,14 +69,16 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
-app.get("/api/me", (c) => {
+app.get("/api/me", async (c) => {
   const user = c.get("user");
   const team = c.get("team");
+  const [settings, dnd] = await Promise.all([getSettings(c.get("db"), c.env), getDndAuth(c.get("db"))]);
   const res: MeResponse = {
     user: toPublicUser(user, true),
     users: c.get("teamPublic"),
     visibleUserIds: visibleIdsFor(user, team),
     today: localDate(c.env.TIMEZONE),
+    features: { plusTrainingUserIds: settings.dndPlusTrainingUserIds, dndConnected: !!dnd },
   };
   return c.json(res);
 });
@@ -90,7 +94,7 @@ app.route("/api/settings", settingsRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "לא נמצא" }, 404));
 
-export async function runScheduled(env: Env, force = false): Promise<{ created: number; digests: number; reminders: number; taskReminders: number }> {
+export async function runScheduled(env: Env, force = false): Promise<{ created: number; digests: number; reminders: number; taskReminders: number; dnd: { sent: number; failed: number; pending: number } | null }> {
   await ensureSchema(env);
   const db = getDb(env.DB);
   const appUrl = env.APP_URL || "";
@@ -98,7 +102,11 @@ export async function runScheduled(env: Env, force = false): Promise<{ created: 
   const digests = await flushDigests(env, db, appUrl, Date.now(), force);
   const reminders = await sendDayEndReminders(env, db, appUrl, new Date(), force);
   const taskReminders = await sendTaskReminders(env, db, appUrl);
-  return { created, digests, reminders, taskReminders };
+  const dnd = await syncDndDeals(env, db).catch((e) => {
+    console.error("dnd sync failed", e);
+    return null;
+  });
+  return { created, digests, reminders, taskReminders, dnd };
 }
 
 export default {

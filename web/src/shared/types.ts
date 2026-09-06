@@ -16,12 +16,35 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   paypal: "פייפאל",
 };
 
-/** A closed deal recorded on a leads task. All three fields are required. */
-// TODO(DND CASH): sync these deals into the DND CASH system.
+export const STANDING_ORDER_METHODS: readonly PaymentMethod[] = ["standing_order", "bank_standing_order"];
+export function isStandingOrder(m: PaymentMethod | "" | null | undefined): boolean {
+  return !!m && (STANDING_ORDER_METHODS as readonly string[]).includes(m);
+}
+
+export type DndSyncStatus = "pending" | "sent" | "error";
+
+/** How a deal stands with DND CASH (the payroll system). Written by the server only. */
+export interface DealDnd {
+  status: DndSyncStatus;
+  id?: string; // the deal's id in DND CASH once it was created there
+  sentAt?: string;
+  attempts?: number;
+  error?: string;
+  /** The deal was edited here after it was sent; DND CASH is never updated from here, so someone must fix it there. */
+  stale?: boolean;
+}
+
+/** A closed deal recorded on a leads task. Name, amount and payment method are required; a standing order also needs its months. */
 export interface Deal {
+  key?: string; // stable id of this row (server-generated), so a re-save keeps its DND CASH link
   name: string; // full customer name
   amount: number; // ₪
   method: PaymentMethod | ""; // "" only for legacy rows saved before the method existed
+  plusTraining?: boolean; // "מכירה + אימון" (20%) – allowed only for the people listed in settings
+  months?: number | null; // standing orders: number of monthly payments
+  firstDue?: string | null; // standing orders: first payment date (YYYY-MM-DD); defaults to the task's date
+  upfront?: number | null; // standing orders: advance paid now, if any
+  dnd?: DealDnd;
 }
 
 export interface DealRow extends Deal {
@@ -69,7 +92,7 @@ export interface Task {
   reminderLastSentAt: string | null;
   metricDeals: number | null;
   metricCalls: number | null;
-  deals: Deal[]; // TODO(DND CASH): connect closed deals to the DND CASH system
+  deals: Deal[];
   createdDate: string;
   createdAt: string;
   updatedAt: string;
@@ -120,6 +143,12 @@ export interface MeResponse {
   users: PublicUser[]; // whole team (names only for non-visible)
   visibleUserIds: number[]; // whose cards this user may open
   today: string; // YYYY-MM-DD in company timezone
+  features: {
+    /** Team members whose leads deals may be marked "sales + training" (20%). */
+    plusTrainingUserIds: number[];
+    /** DND CASH is connected: new deals are sent there automatically. */
+    dndConnected: boolean;
+  };
 }
 
 export interface BoardResponse {
@@ -162,6 +191,9 @@ export interface AppSettings {
   whatsappLang: string;
   /** Daily reminder time per weekday (0 = Sunday), "HH:MM" or "" for none. Saturday is the "plan the week" reminder. */
   reminderTimes: string[];
+  /** DND CASH (payroll): where it lives, and who may mark a deal as "sales + training". The connection itself is stored separately. */
+  dndBaseUrl: string;
+  dndPlusTrainingUserIds: number[];
 }
 
 export interface AuthConfig {
