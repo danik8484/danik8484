@@ -325,7 +325,7 @@ test.describe.serial("DND CASH: a closed deal saved here becomes a new deal ther
     await page.getByTestId(`task-${ronTask}`).first().click();
     await expect(page.getByTestId("deal-so-0")).toBeVisible();
     await expect(page.getByTestId("deal-months-0")).toHaveValue("10");
-    await expect(page.getByTestId("deal-plus-0")).toBeChecked();
+    await expect(page.getByTestId("deal-plus-0")).toHaveValue("plus");
     await expect(page.getByTestId("deal-dnd-0")).toContainText("נשלח ל-DND CASH");
     await expect(page.getByTestId("deal-dnd-0")).toContainText("שונה אחרי השליחה");
     await expect(page.getByTestId("deal-dnd-1")).toContainText("נשלח ל-DND CASH");

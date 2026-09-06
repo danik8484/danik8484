@@ -62,7 +62,7 @@ test("urgent tasks sit on top in bold with a siren; high priority precedes norma
   await page.context().close();
 });
 
-test("managers can send an immediate full-detail notice; unreachable recipients fall back to the digest", async ({ browser, request }) => {
+test("anyone can send an immediate full-detail notice; unreachable recipients fall back to the digest", async ({ browser, request }) => {
   await apiLogin(request, "uri.h@example.com");
   const before = (await (await request.get("/api/push/pending")).json()).pending;
   await request.post("/api/auth/logout");
@@ -83,7 +83,7 @@ test("managers can send an immediate full-detail notice; unreachable recipients 
   expect(after).toBe(before + 1);
   await request.post("/api/auth/logout");
 
-  // Employees never get the option (server ignores it)
+  // Employees may send it too (6.9): an immediate notice to the admin, who falls back to the digest here
   await apiLogin(request, "uri.h@example.com");
   const r = await request.post("/api/tasks", { data: { title: `מ-אורי ${tag}`, assigneeId: 1, dueDate: "2030-01-01", notifyNow: true } });
   expect(r.status()).toBe(201);

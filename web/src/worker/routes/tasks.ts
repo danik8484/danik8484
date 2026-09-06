@@ -130,8 +130,8 @@ taskRoutes.post("/", async (c) => {
     .returning()
     .get();
   await db.insert(taskEvents).values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open", note: priority !== "normal" ? PRIORITY_NOTE[priority] : "" }).run();
-  // Managers may send the full task right now instead of waiting for the batched digest.
-  const notifyNow = body.notifyNow === true && me.role !== "employee" && !isCoordinator(me) && assigneeId !== me.id;
+  // Anyone may send the full task right now instead of waiting for the batched digest (owner's rule, 6.9).
+  const notifyNow = body.notifyNow === true && assigneeId !== me.id;
   if (notifyNow) {
     // Send right away; if the person has no device and no WhatsApp, fall back to the batched digest so nothing is lost.
     c.executionCtx.waitUntil(

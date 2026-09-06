@@ -30,7 +30,6 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
   const [leads, setLeads] = useState(false);
   const [priority, setPriority] = useState<TaskPriority>(existing?.priority ?? "normal");
   const [notifyNow, setNotifyNow] = useState(false);
-  const isManager = s.user.role !== "employee" && !isCoordinator(s.user);
   // Recurring tasks are for people whose board you manage (a coordinator manages only their own).
   const canRecur = canManage(s.user, assigneeId, s.users);
   // An instance of a recurring task keeps its person and its date; a task with a manager's reminder stays where it is.
@@ -60,7 +59,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
           weekdays: recurring ? weekdays : [],
           kind: recurring && leads ? "leads" : "normal",
           priority: recurring ? "normal" : priority,
-          notifyNow: !recurring && isManager && notifyNow && assigneeId !== s.user.id,
+          notifyNow: !recurring && notifyNow && assigneeId !== s.user.id,
         });
       }
       onSaved();
@@ -117,7 +116,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
                 aria-checked={priority === p}
                 onClick={() => {
                   setPriority(p);
-                  if (p === "urgent" && isManager) setNotifyNow(true);
+                  if (p === "urgent") setNotifyNow(true);
                 }}
                 className={`rounded-lg border px-2 py-2 text-sm font-semibold ${
                   priority === p
@@ -136,7 +135,7 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
           <p className="mt-1 text-xs text-slate-500">{PRIORITY_HINT[priority]}</p>
         </fieldset>
       )}
-      {!existing && !recurring && isManager && assigneeId !== s.user.id && (
+      {!existing && !recurring && assigneeId !== s.user.id && (
         <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-ink-700">
           <input type="checkbox" className="mt-0.5 size-4 accent-brand-600" checked={notifyNow} onChange={(e) => setNotifyNow(e.target.checked)} data-testid="notify-now" />
           <span>

@@ -463,15 +463,17 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                               </div>
                             )}
                             {canPlusTraining && (
-                              <label className="mt-2 flex items-center gap-2 text-sm text-ink-700">
-                                <input
-                                  type="checkbox"
-                                  className="size-4 accent-brand-600"
-                                  checked={d.plusTraining}
-                                  onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, plusTraining: e.target.checked } : x)))}
+                              <label className="mt-2 block text-xs font-semibold text-slate-600">
+                                סוג עסקה
+                                <select
+                                  className={`${inputCls} mt-1`}
+                                  value={d.plusTraining ? "plus" : "sales"}
+                                  onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, plusTraining: e.target.value === "plus" } : x)))}
                                   data-testid={`deal-plus-${i}`}
-                                />
-                                מכירה + אימון (20%)
+                                >
+                                  <option value="sales">מכירה בלבד (10%)</option>
+                                  <option value="plus">מכירה + אימון (20%)</option>
+                                </select>
                               </label>
                             )}
                             {d.dnd && (
