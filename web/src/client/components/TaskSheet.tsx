@@ -317,7 +317,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
               {tier === 0 && task.createdById !== task.assigneeId && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-xs font-semibold text-white">מההנהלה</span>}
               {tier === 2 && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">בקשה מעמית</span>}
               {task.kind === "leads" && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">לידים</span>}
-              {task.status !== "done" && daysBetween(task.dueDate, viewDate) > 0 && (
+              {task.status !== "done" && !task.recurringId && daysBetween(task.dueDate, viewDate) > 0 && (
                 <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">נגררת {daysBetween(task.dueDate, viewDate)} ימים</span>
               )}
             </div>

@@ -282,29 +282,34 @@ test("done: whoever owns the task marks it done (not only the manager); another 
   expect((await request.delete(`/api/tasks/${id}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
 });
 
-test("recurring: one open instance at a time – yesterday's stays until it is done, then today's appears", async ({ request }) => {
+test("recurring: an instance belongs to its own day – yesterday's undone one is not carried, today's is fresh", async ({ request }) => {
   await apiLogin(request, ADMIN);
   const d = await today(request);
-  const rec = await (await request.post("/api/tasks", { data: { title: `קבועה אחת ${tag}`, assigneeId: URI_H, dueDate: d, weekdays: [0, 1, 2, 3, 4, 5, 6] } })).json();
+  const rec = await (await request.post("/api/tasks", { data: { title: `קבועה ליום ${tag}`, assigneeId: URI_H, dueDate: d, weekdays: [0, 1, 2, 3, 4, 5, 6] } })).json();
   const templateId = rec.recurringId;
-  const board = async () => ((await (await request.get("/api/tasks/board")).json()).tasks as { id: number; recurringId: number | null; dueDate: string; status: string }[]).filter((t) => t.recurringId === templateId);
+  type Row = { id: number; recurringId: number | null; dueDate: string; status: string; title: string };
+  const board = async (date?: string) => ((await (await request.get(`/api/tasks/board${date ? `?date=${date}` : ""}`)).json()).tasks as Row[]).filter((t) => t.recurringId === templateId);
   const first = (await board())[0];
   expect(first).toBeTruthy();
-  // move today's instance to yesterday, straight in the local database
+  // move today's instance to yesterday and give it a reminder, straight in the local database
   const y = new Date(d + "T00:00:00Z");
   y.setUTCDate(y.getUTCDate() - 1);
   const yesterday = y.toISOString().slice(0, 10);
-  execSync(`npx wrangler d1 execute fitness-daily-tasks --local --command "UPDATE tasks SET due_date='${yesterday}' WHERE id=${first.id}"`, { stdio: "ignore" });
-  // a forced re-run (weekday edit) does NOT add today's instance while yesterday's is open
+  execSync(`npx wrangler d1 execute fitness-daily-tasks --local --command "UPDATE tasks SET due_date='${yesterday}', created_date='${yesterday}', reminder_at='2030-01-01T00:00:00.000Z' WHERE id=${first.id}"`, { stdio: "ignore" });
+  // a forced re-run creates today's instance; yesterday's is not on today's board
   expect((await request.patch(`/api/recurring/${templateId}`, { data: { weekdays: [0, 1, 2, 3, 4, 5, 6] } })).ok()).toBeTruthy();
-  let now = await board();
-  expect(now.map((t) => t.dueDate)).toEqual([yesterday]);
-  // once yesterday's is done, today's appears right away
-  await apiLogin(request, URI_H);
-  expect((await request.post(`/api/tasks/${first.id}/status`, { data: { status: "done", note: "" } })).ok()).toBeTruthy();
-  await apiLogin(request, ADMIN);
-  now = await board();
-  expect(now.filter((t) => t.status !== "done").map((t) => t.dueDate)).toEqual([d]);
+  const todayRows = await board();
+  expect(todayRows.map((t) => t.dueDate)).toEqual([d]);
+  expect(todayRows[0].id).not.toBe(first.id);
+  // yesterday's board still shows yesterday's, still open, but its reminder is gone
+  const yRows = await board(yesterday);
+  expect(yRows.map((t) => [t.id, t.status])).toEqual([[first.id, "open"]]);
+  expect((await (await request.get(`/api/tasks/${first.id}`)).json()).task.reminderAt).toBeNull();
+  // the morning report lists today's only, without a "(מ-…)" carry-over mark
+  const preview = await (await request.get("/api/settings/morning-report/preview")).json();
+  const lines: string[] = preview.people.find((p: { userId: number }) => p.userId === URI_H).lines.filter((l: string) => l.includes(`קבועה ליום ${tag}`));
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).not.toContain("(מ-");
   expect((await request.delete(`/api/recurring/${templateId}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
 });
 
