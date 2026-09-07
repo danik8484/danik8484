@@ -41,7 +41,7 @@ export default function Recurring() {
         <h1 className="text-lg font-bold text-ink-900">משימות קבועות</h1>
         <Button onClick={() => setAdding(true)}>+ משימה קבועה</Button>
       </div>
-      <p className="mb-3 text-sm text-slate-600">משימות שנוצרות אוטומטית בימים שנבחרו. משימה קבועה שייכת ליום שלה בלבד: מה שלא סומן עד סוף היום לא נגרר למחר (נשאר בהיסטוריה), ולמחרת מופיע עותק נקי.</p>
+      <p className="mb-3 text-sm text-slate-600">משימות שנוצרות אוטומטית בימים שנבחרו. משימה קבועה יושבת על הלוח עד שמסמנים "הושלם" (בלי עותק שני ובלי "נגררת"), ואחרי שהושלמה חוזרת נקייה ביום הבא.</p>
       <ErrorText>{error}</ErrorText>
       {items === null ? (
         <Spinner />

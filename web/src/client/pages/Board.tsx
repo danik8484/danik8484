@@ -87,7 +87,7 @@ export default function Board() {
     const done = asOf.filter((t) => t.status === "done").length;
     const inProgress = asOf.filter((t) => t.status === "in_progress").length;
     const open = asOf.filter((t) => t.status === "open").length;
-    const overdue = asOf.filter((t) => t.status !== "done" && daysBetween(t.dueDate, date) > 0).length;
+    const overdue = asOf.filter((t) => t.status !== "done" && !t.recurringId && daysBetween(t.dueDate, date) > 0).length;
     return { done, inProgress, open, overdue, total: asOf.length };
   }, [asOf, date]);
 
@@ -409,7 +409,7 @@ function SectionHeader({ children, tone }: { children: React.ReactNode; tone: "r
 
 function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onOpen: (id: number) => void }) {
   const s = useSession();
-  const overdue = task.status !== "done" ? daysBetween(task.dueDate, viewDate) : 0;
+  const overdue = task.status !== "done" && !task.recurringId ? daysBetween(task.dueDate, viewDate) : 0;
   const byOther = task.createdById !== task.assigneeId;
   return (
     <li>

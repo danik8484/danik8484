@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import type { Db } from "./db/client";
 import { appMeta, recurringTasks, tasks, taskEvents, users } from "./db/schema";
 import { weekdayOf } from "./dates";
@@ -8,9 +8,9 @@ const META_KEY = "last_materialized_date";
 /**
  * Create today's instances of every active recurring task (idempotent).
  * Runs at most once per day per process path thanks to the app_meta marker,
- * unless `force` is set (used after a recurring task is created).
- * An instance belongs to its own day only (7.9: "משימה קבועה לא נגררת"): yesterday's undone instance is not carried over –
- * it stays in the history, its reminder is switched off, and today's instance is created fresh.
+ * unless `force` is set (used after a recurring task is created or one of its instances is marked done).
+ * One open instance at a time (7.9, Dani): a recurring task sits on the board until it is marked done – no second copy is
+ * added meanwhile – and once done, the next instance appears (tomorrow, or right away if today's is still missing).
  */
 export async function materializeRecurring(db: Db, today: string, force = false): Promise<number> {
   if (!force) {
@@ -31,6 +31,12 @@ export async function materializeRecurring(db: Db, today: string, force = false)
     if (!assigneeActive) continue;
     const days = r.weekdays.split(",").filter(Boolean).map(Number);
     if (!days.includes(wd)) continue;
+    const stillOpen = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.recurringId, r.id), isNull(tasks.deletedAt), ne(tasks.status, "done"), lt(tasks.dueDate, today)))
+      .get();
+    if (stillOpen) continue;
     const inserted = await db
       .insert(tasks)
       .values({
@@ -54,13 +60,6 @@ export async function materializeRecurring(db: Db, today: string, force = false)
         .run();
     }
   }
-
-  // Reminders on undone instances of earlier days would keep firing for a task nobody sees any more.
-  await db
-    .update(tasks)
-    .set({ reminderAt: null, reminderLastSentAt: null })
-    .where(and(isNotNull(tasks.recurringId), isNull(tasks.deletedAt), ne(tasks.status, "done"), lt(tasks.dueDate, today), isNotNull(tasks.reminderAt)))
-    .run();
 
   await db
     .insert(appMeta)

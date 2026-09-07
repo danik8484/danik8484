@@ -42,8 +42,8 @@ taskRoutes.get("/board", async (c) => {
   const doneVisibleOn = (d: string) =>
     sql`(${tasks.status} = 'done' AND min(${tasks.dueDate}, coalesce(${tasks.completedDate}, ${tasks.dueDate})) <= ${d} AND max(${tasks.dueDate}, coalesce(${tasks.completedDate}, ${tasks.dueDate})) >= ${d})`;
   const notDone = or(eq(tasks.status, "open"), eq(tasks.status, "in_progress"));
-  // A recurring (daily) task belongs to its own day only: what was not marked by the end of the day is not carried over (7.9).
-  const openOn = (d: string) => and(notDone, or(and(isNull(tasks.recurringId), lte(tasks.dueDate, d)), eq(tasks.dueDate, d)));
+  // Every open task stays on the board until it is done – a recurring one too (it just is not flagged as "carried over").
+  const openOn = (d: string) => and(notDone, lte(tasks.dueDate, d));
   const sent = await db
     .select()
     .from(tasks)
@@ -315,6 +315,8 @@ taskRoutes.post("/:id/status", async (c) => {
   );
   // New closed deals go to DND CASH right away (the sync also runs every 5 minutes for anything that failed).
   if (dndPending) c.executionCtx.waitUntil(syncDndDeals(c.env, db).catch((e) => console.error("dnd sync failed", e)));
+  // A recurring task keeps one open instance at a time: once it is done, today's instance is created if it is missing.
+  if (changed && status === "done" && row.recurringId) await materializeRecurring(db, today, true);
   // Whoever gave the task hears right away that it is done (unless they closed it themselves).
   if (changed && status === "done" && row.createdById !== me.id) {
     const team = c.get("team");
