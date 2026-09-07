@@ -17,6 +17,7 @@ const TYPE_STYLE: Record<string, string> = {
   photo_removed: "bg-slate-100 text-slate-700",
   reminder: "bg-slate-100 text-slate-700",
   clarify: "bg-purple-100 text-purple-800",
+  clarify_answer: "bg-purple-100 text-purple-800",
 };
 
 export default function Log() {

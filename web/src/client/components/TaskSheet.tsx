@@ -38,6 +38,8 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
   const [nudged, setNudged] = useState(false);
   const [clarifyQ, setClarifyQ] = useState("");
   const [clarified, setClarified] = useState(false);
+  const [answerText, setAnswerText] = useState("");
+  const [answered, setAnswered] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -77,9 +79,13 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setNudged(false);
     setClarified(false);
     setClarifyQ("");
+    setAnswered(false);
+    setAnswerText("");
     load().catch((e) => setError((e as Error).message));
   }, [load]);
 
+  const lastClarifyEvent = [...events].reverse().find((e) => e.type === "clarify" || e.type === "clarify_answer");
+  const openQuestion = lastClarifyEvent?.type === "clarify" ? lastClarifyEvent : null;
   const editable = task ? canEditOrDelete(s.user, task, s.users) : false;
   const canChangeStatus = task ? canManage(s.user, task.assigneeId, s.users) : false;
   const canDone = task ? canMarkDone(s.user, task, s.users) : false;
@@ -145,6 +151,24 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     setError("");
     try {
       await api.updateTask(task.id, { priority: task.priority === "urgent" ? "normal" : "urgent" });
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** "ענה": answer an open clarification; the person the task belongs to is told right away. */
+  async function sendAnswer() {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.clarifyAnswer(task.id, answerText);
+      setAnswered(true);
+      setAnswerText("");
       await load();
       onChanged();
     } catch (e) {
@@ -357,7 +381,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">רק {s.nameOf(task.assigneeId)} או המנהל שלו יכולים לעדכן את הסטטוס.{editable ? " אתה יכול לערוך או למחוק את הבקשה." : ""}</p>
           )}
           {!task.deletedAt && canChangeStatus && task.status === "done" && !canDone && (
-            <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-700">המשימה סומנה כהושלמה על ידי {s.nameOf(task.completedById)}. רק המנהל יכול לפתוח אותה מחדש.</p>
+            <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-700">המשימה סומנה כהושלמה על ידי {s.nameOf(task.completedById)}. רק בעל המשימה או המנהל שלו יכולים לפתוח אותה מחדש.</p>
           )}
           {!task.deletedAt && canChangeStatus && !(task.status === "done" && !canDone) && (
             <div className="rounded-xl border border-slate-200 p-3">
@@ -370,7 +394,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                     role="radio"
                     aria-checked={status === st}
                     disabled={st === "done" && !canDone}
-                    title={st === "done" && !canDone ? "רק המנהל מסמן הושלם" : undefined}
+                    title={st === "done" && !canDone ? "רק בעל המשימה או המנהל שלו מסמנים הושלם" : undefined}
                     onClick={() => setStatus(st)}
                     className={`rounded-lg border px-2 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${
                       status === st
@@ -387,7 +411,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                 ))}
               </div>
               {!canDone && task.status !== "done" && (
-                <p className="mt-2 text-xs text-slate-500">"הושלם" על משימה שניתנה על ידי {s.nameOf(task.createdById)} מסמן רק המנהל. כשסיימת, סמן "בתהליך" וכתוב שבוצע.</p>
+                <p className="mt-2 text-xs text-slate-500">"הושלם" מסמנים רק {s.nameOf(task.assigneeId)} או המנהל שלו.</p>
               )}
               <label className="mt-3 block">
                 <span className="mb-1 block text-sm font-semibold text-ink-700">
@@ -577,9 +601,35 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
             </div>
           )}
 
+          {!task.deletedAt && task.status !== "done" && (openQuestion || answered) && task.assigneeId !== s.user.id && (task.createdById === s.user.id || canChangeStatus) && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3" data-testid="clarify-answer">
+              <div className="text-sm text-ink-700">
+                {openQuestion
+                  ? `❓ ${s.nameOf(openQuestion.actorId)} ביקש חידוד${openQuestion.note.startsWith("צריך חידוד: ") ? `: "${openQuestion.note.slice("צריך חידוד: ".length)}"` : ""}. התשובה תתווסף לפירוט והוא יקבל הודעה.`
+                  : `💬 התשובה נשלחה ל${s.nameOf(task.assigneeId)} ונוספה לפירוט.`}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  className={inputCls}
+                  placeholder="התשובה שלך"
+                  value={answerText}
+                  onChange={(e) => setAnswerText(e.target.value)}
+                  maxLength={1000}
+                  disabled={busy || answered}
+                  data-testid="clarify-answer-text"
+                />
+                <Button variant="secondary" className="shrink-0 px-3 py-1.5" disabled={busy || answered || !answerText.trim()} onClick={sendAnswer} data-testid="clarify-answer-button">
+                  {answered ? "נשלח ✓" : "ענה"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {!task.deletedAt && task.status !== "done" && task.assigneeId === s.user.id && task.createdById !== s.user.id && (
             <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3" data-testid="clarify">
-              <div className="text-sm text-ink-700">❓ לא בטוח מה בדיוק צריך? {s.nameOf(task.createdById)} יקבל הודעה שצריך חידוד.</div>
+              <div className="text-sm text-ink-700">
+                {openQuestion && !clarified ? `❓ ביקשת חידוד. ממתין לתשובה מ${s.nameOf(task.createdById)}.` : `❓ לא בטוח מה בדיוק צריך? ${s.nameOf(task.createdById)} יקבל הודעה שצריך חידוד.`}
+              </div>
               <div className="mt-2 flex items-center gap-2">
                 <input
                   className={inputCls}
@@ -769,6 +819,8 @@ export function eventText(ev: TaskEvent): string {
       return "תזכורת";
     case "clarify":
       return "ביקש חידוד";
+    case "clarify_answer":
+      return "ענה על החידוד";
     default:
       return ev.type;
   }

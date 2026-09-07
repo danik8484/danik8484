@@ -118,9 +118,10 @@ test.describe.serial("coordinator (רכז): own board like a teammate, sees ever
   test("on their own card the coordinator works like any teammate: status, photos, own recurring tasks", async ({ request }) => {
     await apiLogin(request, coordId);
     const { today } = await (await request.get("/api/me")).json();
-    // a task the admin gave: "in progress" with a note yes, "done" only by the admin / direct manager
+    // a task the admin gave: "in progress" with a note, and "done" by the coordinator themselves (7.9: whoever owns the task marks it done)
     expect((await request.post(`/api/tasks/${adminTaskForCoord}/status`, { data: { status: "in_progress", note: "התחלתי" } })).ok()).toBeTruthy();
-    expect((await request.post(`/api/tasks/${adminTaskForCoord}/status`, { data: { status: "done", note: "" } })).status()).toBe(403);
+    expect((await request.post(`/api/tasks/${adminTaskForCoord}/status`, { data: { status: "done", note: "" } })).ok()).toBeTruthy();
+    expect((await request.post(`/api/tasks/${adminTaskForCoord}/status`, { data: { status: "open", note: "" } })).ok()).toBeTruthy();
     // a task for themselves: fully theirs
     const self = await request.post("/api/tasks", { data: { title: `משימה של הרכז לעצמו ${unique}`, assigneeId: coordId, dueDate: today } });
     expect(self.ok()).toBeTruthy();

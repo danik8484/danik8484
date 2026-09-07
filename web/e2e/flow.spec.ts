@@ -132,9 +132,9 @@ test.describe.serial("daily schedule flow", () => {
     await page.getByRole("button", { name: "הוספה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.uriSSelf)).toBeVisible();
 
-    // The manager's task: an employee cannot mark it done, only report progress
+    // The manager's task: the employee may mark it done (7.9); here they report progress first
     await page.getByTestId("card-3").getByText(T.daniForUriS).click();
-    await expect(page.getByRole("dialog").getByRole("radio", { name: "הושלם" })).toBeDisabled();
+    await expect(page.getByRole("dialog").getByRole("radio", { name: "הושלם" })).toBeEnabled();
     await page.getByLabel(/מה בוצע ומה נשאר/).fill("סיימתי הכל");
     await page.getByRole("button", { name: "שמירת עדכון" }).click();
     await expect(page.getByRole("dialog").getByText("עדכון פירוט")).toBeVisible();
@@ -148,13 +148,14 @@ test.describe.serial("daily schedule flow", () => {
     await page.getByRole("dialog").getByRole("button", { name: "מחיקה" }).click();
     await expect(page.getByTestId("card-3").getByText(T.uriSSelf)).toHaveCount(0);
 
-    // API: employee cannot read the log or users, and cannot mark the manager's task done
+    // API: employee cannot read the log or users; the manager's task they CAN mark done themselves (7.9)
     await apiLogin(request, EMAILS.uriS);
     expect((await request.get("/api/log")).status()).toBe(403);
     expect((await request.get("/api/users")).status()).toBe(403);
     const board = await (await request.get("/api/tasks/board")).json();
     const managerTask = board.tasks.find((t: { title: string }) => t.title === T.daniForUriS);
-    expect((await request.post(`/api/tasks/${managerTask.id}/status`, { data: { status: "done", note: "" } })).status()).toBe(403);
+    expect((await request.post(`/api/tasks/${managerTask.id}/status`, { data: { status: "done", note: "" } })).ok()).toBeTruthy();
+    expect((await request.post(`/api/tasks/${managerTask.id}/status`, { data: { status: "open", note: "" } })).ok()).toBeTruthy();
     await page.context().close();
 
     // Ron, as Uri Shapira's manager, closes it

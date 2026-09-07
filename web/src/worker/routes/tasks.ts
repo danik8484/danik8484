@@ -176,7 +176,7 @@ taskRoutes.post("/:id/status", async (c) => {
   if (!canManage(mePublic, row.assigneeId, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
   if (status !== row.status && !canChangeStatus(mePublic, row, status, c.get("teamPublic"))) {
     return c.json(
-      { error: row.status === "done" ? "רק המנהל יכול לפתוח מחדש משימה שסומנה כהושלמה." : "רק המנהל יכול לסמן 'הושלם' על משימה שניתנה על ידי מישהו אחר. סמן 'בתהליך' וכתוב מה בוצע." },
+      { error: row.status === "done" ? "רק בעל המשימה או המנהל שלו יכולים לפתוח מחדש משימה שסומנה כהושלמה." : "רק בעל המשימה או המנהל שלו יכולים לסמן 'הושלם'." },
       403,
     );
   }
@@ -313,6 +313,8 @@ taskRoutes.post("/:id/status", async (c) => {
   );
   // New closed deals go to DND CASH right away (the sync also runs every 5 minutes for anything that failed).
   if (dndPending) c.executionCtx.waitUntil(syncDndDeals(c.env, db).catch((e) => console.error("dnd sync failed", e)));
+  // A recurring task keeps one open instance at a time: once it is done, today's instance is created if it is missing.
+  if (changed && status === "done" && row.recurringId) await materializeRecurring(db, today, true);
   // Whoever gave the task hears right away that it is done (unless they closed it themselves).
   if (changed && status === "done" && row.createdById !== me.id) {
     const team = c.get("team");
@@ -444,6 +446,54 @@ taskRoutes.post("/:id/clarify", async (c) => {
   if (delivered === "none") await queueTaskNotification(db, creator.id, me.id, id);
   c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "clarify", { extra: `${note} (נשאל ${creator.name})` }));
   return c.json({ ok: true, delivered });
+});
+
+/** "ענה": whoever gave the task (or a manager of its person) answers an open clarification; the answer is added to the task's details and the person hears right away. */
+taskRoutes.post("/:id/clarify-answer", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user");
+  const teamPublic = c.get("teamPublic");
+  const id = int(c.req.param("id"));
+  if (id === null) return c.json({ error: "לא נמצא" }, 404);
+  const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
+  if (!row) return c.json({ error: "לא נמצא" }, 404);
+  const mePublic = toPublicUser(me, false);
+  if (!canOpenTask(mePublic, row, teamPublic)) return c.json({ error: "אין הרשאה" }, 403);
+  if (row.assigneeId === me.id) return c.json({ error: "על חידוד עונה מי שנתן את המשימה" }, 400);
+  if (row.createdById !== me.id && !canManage(mePublic, row.assigneeId, teamPublic)) return c.json({ error: "רק מי שנתן את המשימה (או המנהל) יכול לענות" }, 403);
+  if (row.status === "done") return c.json({ error: "המשימה כבר הושלמה" }, 400);
+  const body = await readJson(c.req.raw);
+  const answer = str(body.answer, 1000);
+  if (!answer) return c.json({ error: "חובה לכתוב תשובה" }, 400);
+  // Only an open question is answered: the last clarification request must be newer than the last answer.
+  const last = await db
+    .select({ type: taskEvents.type })
+    .from(taskEvents)
+    .where(and(eq(taskEvents.taskId, id), inArray(taskEvents.type, ["clarify", "clarify_answer"])))
+    .orderBy(desc(taskEvents.id))
+    .get();
+  if (!last || last.type !== "clarify") return c.json({ error: "אין בקשת חידוד פתוחה על המשימה" }, 400);
+  const team = c.get("team");
+  const myShort = shortName(me.name, team, me.id);
+  const details = [row.details, `💬 חידוד מ${myShort}: ${answer}`].filter(Boolean).join("\n\n").slice(0, 3000);
+  await db.update(tasks).set({ details, updatedAt: nowIso() }).where(eq(tasks.id, id)).run();
+  await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "clarify_answer", note: answer }).run();
+  const origin = new URL(c.req.url).origin;
+  let delivered: "push" | "whatsapp" | "both" | "none" = "none";
+  try {
+    delivered = await notifyUser(c.env, db, row.assigneeId, {
+      title: `💬 ${myShort} ענה על החידוד: ${row.title}`,
+      body: answer,
+      url: `${origin}/?task=${id}`,
+      tag: `clarify-answer-${id}`,
+    });
+  } catch (e) {
+    console.error("clarify answer failed", e);
+  }
+  if (delivered === "none") await queueTaskNotification(db, row.assigneeId, me.id, id);
+  c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "clarify_answer", { extra: `תשובה: ${answer}` }));
+  const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
+  return c.json({ ok: true, delivered, task: toTask(updated!) });
 });
 
 taskRoutes.patch("/:id", async (c) => {

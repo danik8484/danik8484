@@ -56,14 +56,16 @@ test("login codes cannot be brute-forced and forms cannot post JSON endpoints", 
   expect(form.status()).toBe(415);
 });
 
-test("employees cannot reopen a task the manager closed", async ({ request }) => {
+test("the person a task belongs to may reopen it after the manager closed it; another employee may not", async ({ request }) => {
   await apiLogin(request, "dani@example.com");
   const created = await (await request.post("/api/tasks", { data: { title: "סגורה על ידי המנהל", assigneeId: 5, dueDate: "2030-03-01" } })).json();
   expect((await request.post(`/api/tasks/${created.task.id}/status`, { data: { status: "done", note: "" } })).status()).toBe(200);
   await request.post("/api/auth/logout");
-  await apiLogin(request, "uri.h@example.com");
+  await apiLogin(request, "uri.s@example.com");
   expect((await request.post(`/api/tasks/${created.task.id}/status`, { data: { status: "open", note: "" } })).status()).toBe(403);
-  expect((await request.post(`/api/tasks/${created.task.id}/status`, { data: { status: "in_progress", note: "עוד עבודה" } })).status()).toBe(403);
+  await request.post("/api/auth/logout");
+  await apiLogin(request, "uri.h@example.com");
+  expect((await request.post(`/api/tasks/${created.task.id}/status`, { data: { status: "in_progress", note: "עוד עבודה" } })).status()).toBe(200);
 });
 
 test("leads task carries deal/call counts, optional", async ({ request }) => {

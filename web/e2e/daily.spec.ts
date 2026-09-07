@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { execSync } from "node:child_process";
 
 /** Push, reminder loops with a chosen interval, the four board sections, and the morning report. */
 const ADMIN = 1;
@@ -167,6 +168,44 @@ test("clarify: the person the task belongs to asks whoever gave it – not the g
   for (const t of [id, own]) expect((await request.delete(`/api/tasks/${t}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
 });
 
+test("answer: whoever gave the task answers an open question – it lands in the details and the person is told", async ({ browser, request }) => {
+  await apiLogin(request, ADMIN);
+  const d = await today(request);
+  const id = (await (await request.post("/api/tasks", { data: { title: `תשובה ${tag}`, assigneeId: URI_H, dueDate: d, details: "לתאם עם הלקוח" } })).json()).task.id;
+  // no question yet → nothing to answer
+  expect((await request.post(`/api/tasks/${id}/clarify-answer`, { data: { answer: "יובל" } })).status()).toBe(400);
+  await apiLogin(request, URI_H);
+  expect((await request.post(`/api/tasks/${id}/clarify`, { data: { question: "איזה לקוח?" } })).ok()).toBeTruthy();
+  const before = await pending(request);
+  // the person the task belongs to cannot answer their own question; someone unrelated cannot either
+  expect((await request.post(`/api/tasks/${id}/clarify-answer`, { data: { answer: "x" } })).status()).toBe(400);
+  await apiLogin(request, 3);
+  expect((await request.post(`/api/tasks/${id}/clarify-answer`, { data: { answer: "x" } })).status()).toBe(403);
+  // whoever gave it answers – in the browser
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await uiLogin(page, "דני שקנבסקי");
+  await page.getByTestId(`task-${id}`).first().click();
+  await expect(page.getByTestId("clarify-answer")).toContainText('אורי חסקל ביקש חידוד: "איזה לקוח?"');
+  await page.getByTestId("clarify-answer-text").fill("יובל אוחיון");
+  await page.getByTestId("clarify-answer-button").click();
+  await expect(page.getByTestId("clarify-answer-button")).toHaveText("נשלח ✓");
+  await expect(page.getByText("💬 חידוד מדני ש.: יובל אוחיון")).toBeVisible();
+  await ctx.close();
+  await apiLogin(request, ADMIN);
+  expect((await request.post(`/api/tasks/${id}/clarify-answer`, { data: { answer: "שוב" } })).status()).toBe(400); // already answered
+  expect((await request.post(`/api/tasks/${id}/clarify-answer`, { data: { answer: "" } })).status()).toBe(400);
+  const detail = await (await request.get(`/api/tasks/${id}`)).json();
+  expect(detail.task.details).toBe("לתאם עם הלקוח\n\n💬 חידוד מדני ש.: יובל אוחיון");
+  const ev = detail.events.find((e: { type: string }) => e.type === "clarify_answer");
+  expect(ev.note).toBe("יובל אוחיון");
+  expect(ev.actorId).toBe(ADMIN);
+  await apiLogin(request, URI_H);
+  expect(await pending(request)).toBe(before + 1);
+  await apiLogin(request, ADMIN);
+  expect((await request.delete(`/api/tasks/${id}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
 test("in the browser: the clarify block shows only on a task someone else gave me, and sends", async ({ browser, request }) => {
   await apiLogin(request, 2); // Ron gives the admin a task
   const d = await today(request);
@@ -224,6 +263,49 @@ test("make urgent: one tap, only for whoever may edit, and the person it belongs
   await expect(page.getByTestId("group-urgent-1").getByText(`דחופה בלחיצה ${tag}`)).toBeVisible();
   await ctx.close();
   for (const t of [id, mine]) expect((await request.delete(`/api/tasks/${t}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
+test("done: whoever owns the task marks it done (not only the manager); another employee still cannot", async ({ request }) => {
+  await apiLogin(request, 2); // Ron gives Uri Haskal a task (Ron is not Uri H's manager)
+  const d = await today(request);
+  const id = (await (await request.post("/api/tasks", { data: { title: `סיום ${tag}`, assigneeId: URI_H, dueDate: d } })).json()).task.id;
+  await apiLogin(request, URI_H);
+  const r = await request.post(`/api/tasks/${id}/status`, { data: { status: "done", note: "" } });
+  expect(r.ok()).toBeTruthy();
+  expect((await r.json()).task.status).toBe("done");
+  // and reopen it themselves
+  expect((await request.post(`/api/tasks/${id}/status`, { data: { status: "open", note: "" } })).ok()).toBeTruthy();
+  // Uri Shapira (another employee) still cannot touch Uri Haskal's task
+  await apiLogin(request, 3);
+  expect((await request.post(`/api/tasks/${id}/status`, { data: { status: "done", note: "" } })).status()).toBe(403);
+  await apiLogin(request, ADMIN);
+  expect((await request.delete(`/api/tasks/${id}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
+test("recurring: one open instance at a time – yesterday's stays until it is done, then today's appears", async ({ request }) => {
+  await apiLogin(request, ADMIN);
+  const d = await today(request);
+  const rec = await (await request.post("/api/tasks", { data: { title: `קבועה אחת ${tag}`, assigneeId: URI_H, dueDate: d, weekdays: [0, 1, 2, 3, 4, 5, 6] } })).json();
+  const templateId = rec.recurringId;
+  const board = async () => ((await (await request.get("/api/tasks/board")).json()).tasks as { id: number; recurringId: number | null; dueDate: string; status: string }[]).filter((t) => t.recurringId === templateId);
+  const first = (await board())[0];
+  expect(first).toBeTruthy();
+  // move today's instance to yesterday, straight in the local database
+  const y = new Date(d + "T00:00:00Z");
+  y.setUTCDate(y.getUTCDate() - 1);
+  const yesterday = y.toISOString().slice(0, 10);
+  execSync(`npx wrangler d1 execute fitness-daily-tasks --local --command "UPDATE tasks SET due_date='${yesterday}' WHERE id=${first.id}"`, { stdio: "ignore" });
+  // a forced re-run (weekday edit) does NOT add today's instance while yesterday's is open
+  expect((await request.patch(`/api/recurring/${templateId}`, { data: { weekdays: [0, 1, 2, 3, 4, 5, 6] } })).ok()).toBeTruthy();
+  let now = await board();
+  expect(now.map((t) => t.dueDate)).toEqual([yesterday]);
+  // once yesterday's is done, today's appears right away
+  await apiLogin(request, URI_H);
+  expect((await request.post(`/api/tasks/${first.id}/status`, { data: { status: "done", note: "" } })).ok()).toBeTruthy();
+  await apiLogin(request, ADMIN);
+  now = await board();
+  expect(now.filter((t) => t.status !== "done").map((t) => t.dueDate)).toEqual([d]);
+  expect((await request.delete(`/api/recurring/${templateId}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
 });
 
 test("in the browser: the push button and the interval picker are there", async ({ browser, request }) => {

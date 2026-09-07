@@ -92,13 +92,9 @@ export function canOpenTask(viewer: PublicUser, task: Pick<Task, "assigneeId" | 
  * - a task the assignee added for themselves: the assignee (and their managers)
  * - a task given by a manager or by another teammate: only the admin or the assignee's direct manager
  */
+/** Whoever manages the card (the person themselves, their manager, the admin) marks "done"; whoever gave the task is then told (7.9: "לא נותן לרשום הושלם"). */
 export function canMarkDone(viewer: PublicUser, task: Pick<Task, "assigneeId" | "createdById" | "recurringId">, all: PublicUser[]): boolean {
-  if (!canManage(viewer, task.assigneeId, all)) return false;
-  if (viewer.role === "admin") return true;
-  if (task.recurringId) return true;
-  if (task.createdById === task.assigneeId) return true;
-  const assignee = all.find((u) => u.id === task.assigneeId);
-  return !!assignee && assignee.managerId === viewer.id;
+  return canManage(viewer, task.assigneeId, all);
 }
 
 /** A progress note is required when marking "in progress", except for recurring (daily) tasks. */

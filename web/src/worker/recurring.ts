@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import type { Db } from "./db/client";
 import { appMeta, recurringTasks, tasks, taskEvents, users } from "./db/schema";
 import { weekdayOf } from "./dates";
@@ -8,7 +8,8 @@ const META_KEY = "last_materialized_date";
 /**
  * Create today's instances of every active recurring task (idempotent).
  * Runs at most once per day per process path thanks to the app_meta marker,
- * unless `force` is set (used after a recurring task is created).
+ * unless `force` is set (used after a recurring task is created or one of its instances is marked done).
+ * One open instance at a time: while an earlier instance is still not done, no new one is created (7.9: "זה יוצר מלא משימות אותו דבר").
  */
 export async function materializeRecurring(db: Db, today: string, force = false): Promise<number> {
   if (!force) {
@@ -29,6 +30,12 @@ export async function materializeRecurring(db: Db, today: string, force = false)
     if (!assigneeActive) continue;
     const days = r.weekdays.split(",").filter(Boolean).map(Number);
     if (!days.includes(wd)) continue;
+    const stillOpen = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.recurringId, r.id), isNull(tasks.deletedAt), ne(tasks.status, "done"), lt(tasks.dueDate, today)))
+      .get();
+    if (stillOpen) continue;
     const inserted = await db
       .insert(tasks)
       .values({

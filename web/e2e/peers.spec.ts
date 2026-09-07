@@ -105,9 +105,9 @@ test.describe.serial("teammates can request tasks from each other", () => {
     const row = uri.getByTestId("sent").locator("li", { hasText: T.uriToDani });
     await expect(row.locator("[aria-label='הושלם']")).toBeVisible();
 
-    // Dani's instruction: employee cannot mark done
+    // 7.9: the person the task belongs to marks it done themselves
     await uri.getByTestId("group-management-5").getByText(T.daniToUri).click();
-    await expect(uri.getByRole("dialog").getByRole("radio", { name: "הושלם" })).toBeDisabled();
+    await expect(uri.getByRole("dialog").getByRole("radio", { name: "הושלם" })).toBeEnabled();
     await uri.getByRole("button", { name: "סגירה" }).click();
 
     // A recurring daily task from Dani: employee marks done, no note needed
