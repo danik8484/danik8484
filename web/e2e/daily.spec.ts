@@ -314,6 +314,25 @@ test("recurring: sits on the board until done (no second copy, not 'carried over
   expect((await request.delete(`/api/recurring/${templateId}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
 });
 
+test("notifications off for one person: nothing is sent or queued to them, and it shows on the team page", async ({ request }) => {
+  await apiLogin(request, ADMIN);
+  const d = await today(request);
+  const off = await (await request.patch(`/api/users/${URI_H}`, { data: { notify: false } })).json();
+  expect(off.user.notify).toBe(false);
+  const id = (await (await request.post("/api/tasks", { data: { title: `שקט ${tag}`, assigneeId: URI_H, dueDate: d, notifyNow: true } })).json()).task.id;
+  expect((await (await request.post(`/api/tasks/${id}/nudge`)).json()).delivered).toBe("none");
+  const preview = await (await request.get("/api/settings/morning-report/preview")).json();
+  expect(preview.people.some((p: { userId: number }) => p.userId === URI_H)).toBeTruthy(); // the preview still lists them; sending skips them
+  await apiLogin(request, URI_H);
+  expect(await pending(request)).toBe(0); // nothing queued for them
+  const me = await (await request.get("/api/me")).json();
+  expect(me.user.notify).toBe(false);
+  await apiLogin(request, ADMIN);
+  const on = await (await request.patch(`/api/users/${URI_H}`, { data: { notify: true } })).json();
+  expect(on.user.notify).toBe(true);
+  expect((await request.delete(`/api/tasks/${id}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
 test("in the browser: the push button and the interval picker are there", async ({ browser, request }) => {
   await apiLogin(request, ADMIN);
   const d = await today(request);

@@ -20,11 +20,13 @@ function priorityPrefix(p: TaskPriority): string {
 
 /** Deliver a message to a user: push to their devices, and WhatsApp to their private phone when configured. */
 export async function notifyUser(env: Env, db: Db, userId: number, content: PushContent, settings?: AppSettings): Promise<"push" | "whatsapp" | "both" | "none"> {
+  const user = await db.select().from(users).where(eq(users.id, userId)).get();
+  // Notifications switched off for this person (8.9): nothing goes out, on any channel.
+  if (!user || user.notify !== 1) return "none";
   const s = settings ?? (await getSettings(db, env));
   const delivered = await pushToUser(env, db, userId, content);
   let sent = false;
-  const user = await db.select().from(users).where(eq(users.id, userId)).get();
-  if (user?.phone && whatsappConfigured(s)) {
+  if (user.phone && whatsappConfigured(s)) {
     try {
       await sendWhatsApp(s, user.phone, `${content.title}: ${content.body}${content.url ? ` ${content.url}` : ""}`);
       sent = true;
@@ -40,6 +42,8 @@ export async function notifyUser(env: Env, db: Db, userId: number, content: Push
 /** Remember that `actorId` added a task for `userId`; digests are sent by the cron. */
 export async function queueTaskNotification(db: Db, userId: number, actorId: number, taskId: number): Promise<void> {
   if (userId === actorId) return;
+  const u = await db.select({ notify: users.notify }).from(users).where(eq(users.id, userId)).get();
+  if (!u || u.notify !== 1) return;
   await db.insert(notificationQueue).values({ userId, actorId, taskId, createdAt: Date.now() }).run();
 }
 
@@ -150,7 +154,7 @@ export async function sendDayEndReminders(env: Env, db: Db, appUrl: string, now 
   const candidates = await db
     .select()
     .from(users)
-    .where(and(eq(users.active, 1), or(isNull(users.reminderSentDate), ne(users.reminderSentDate, today))))
+    .where(and(eq(users.active, 1), eq(users.notify, 1), or(isNull(users.reminderSentDate), ne(users.reminderSentDate, today))))
     .all();
   let sent = 0;
   for (const u of candidates) {
@@ -278,7 +282,7 @@ export async function sendMorningReports(env: Env, db: Db, appUrl: string, now =
   const candidates = await db
     .select()
     .from(users)
-    .where(and(eq(users.active, 1), or(isNull(users.morningSentDate), ne(users.morningSentDate, today))))
+    .where(and(eq(users.active, 1), eq(users.notify, 1), or(isNull(users.morningSentDate), ne(users.morningSentDate, today))))
     .all();
   if (candidates.length === 0) return 0;
   const team = await db.select({ id: users.id, name: users.name }).from(users).all();

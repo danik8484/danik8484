@@ -52,6 +52,7 @@ export default function Users() {
                 <div className="text-sm font-bold text-ink-900">
                   {u.name} <span className="text-xs font-normal text-slate-500">· {ROLE_LABEL[u.role]}</span>
                   {!u.active && <span className="ms-2 text-xs font-semibold text-red-600">מושבת</span>}
+                  {u.active && !u.notify && <span className="ms-2 text-xs font-semibold text-slate-500" title="לא מקבל התראות">🔕 בלי התראות</span>}
                 </div>
                 <div className="truncate text-xs text-slate-500" dir="ltr">
                   {u.email ?? <span className="text-amber-700" dir="rtl">לא הוגדר מייל</span>}
@@ -131,6 +132,7 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
   const [role, setRole] = useState<Role>(user?.role ?? "employee");
   const [managerId, setManagerId] = useState<number | "">(user?.managerId ?? "");
   const [active, setActive] = useState(user?.active ?? true);
+  const [notify, setNotify] = useState(user?.notify ?? true);
   void s;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -143,7 +145,7 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
     setError("");
     try {
       const payload = { name, email: email.trim() ? email.trim() : null, phone: phone.trim() ? phone.trim() : null, role, managerId: role === "admin" || managerId === "" ? null : Number(managerId) };
-      if (user) await api.updateUser(user.id, { ...payload, active });
+      if (user) await api.updateUser(user.id, { ...payload, active, notify });
       else await api.createUser(payload);
       onSaved();
     } catch (err) {
@@ -193,6 +195,12 @@ function UserForm({ user, all, onCancel, onSaved }: { user: PublicUser | null; a
         <label className="flex items-center gap-2 text-sm font-semibold text-ink-700">
           <input type="checkbox" className="size-4 accent-brand-600" checked={active} onChange={(e) => setActive(e.target.checked)} />
           פעיל (איש צוות מושבת לא יכול להיכנס)
+        </label>
+      )}
+      {user && (
+        <label className="flex items-center gap-2 text-sm font-semibold text-ink-700">
+          <input type="checkbox" className="size-4 accent-brand-600" checked={notify} onChange={(e) => setNotify(e.target.checked)} data-testid="user-notify" />
+          מקבל התראות (משימות, תזכורות, דוח בוקר; קוד כניסה נשלח תמיד)
         </label>
       )}
       <ErrorText>{error}</ErrorText>

@@ -76,6 +76,8 @@ export interface PublicUser {
   managerId: number | null;
   sortOrder: number;
   active: boolean;
+  /** false = this person gets no task notices, reminders or reports (login codes still arrive). */
+  notify: boolean;
 }
 
 export interface Task {

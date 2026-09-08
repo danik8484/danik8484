@@ -47,6 +47,7 @@ export function toPublicUser(u: UserRow, includeEmail: boolean): PublicUser {
     managerId: u.managerId,
     sortOrder: u.sortOrder,
     active: u.active === 1,
+    notify: u.notify === 1,
   };
 }
 

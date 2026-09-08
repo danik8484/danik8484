@@ -12,6 +12,7 @@ export const users = sqliteTable("users", {
   managerId: integer("manager_id"),
   sortOrder: integer("sort_order").notNull().default(0),
   active: integer("active").notNull().default(1),
+  notify: integer("notify").notNull().default(1), // 0 = no notices at all (login codes excepted)
   reminderSentDate: text("reminder_sent_date"),
   morningSentDate: text("morning_sent_date"),
   createdAt: text("created_at").notNull().default(nowIso),

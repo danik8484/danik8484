@@ -113,12 +113,14 @@ userRoutes.patch("/:id", async (c) => {
     const so = int(body.sortOrder);
     if (so !== null) patch.sortOrder = so;
   }
+  if (body.notify !== undefined) patch.notify = body.notify ? 1 : 0;
   await db.update(users).set(patch).where(eq(users.id, id)).run();
   if (patch.role !== row.role && id !== me.id) {
     // A changed role means different screens and rights: sign the person out so their app reloads with the new role.
     await db.delete(sessions).where(eq(sessions.userId, id)).run();
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, id)).run();
   }
+  if (patch.notify === 0) await db.delete(notificationQueue).where(and(eq(notificationQueue.userId, id), isNull(notificationQueue.sentAt))).run();
   if (patch.active === 0) {
     await db.delete(sessions).where(eq(sessions.userId, id)).run();
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, id)).run();

@@ -98,6 +98,6 @@ export const api = {
   users: () => request<{ users: PublicUser[] }>("GET", "/api/users"),
   createUser: (input: { name: string; email: string | null; phone: string | null; role: string; managerId: number | null }) =>
     request<{ ok: true; user: PublicUser }>("POST", "/api/users", input),
-  updateUser: (id: number, input: Partial<{ name: string; email: string | null; phone: string | null; role: string; managerId: number | null; active: boolean; sortOrder: number }>) =>
+  updateUser: (id: number, input: Partial<{ name: string; email: string | null; phone: string | null; role: string; managerId: number | null; active: boolean; notify: boolean; sortOrder: number }>) =>
     request<{ ok: true; user: PublicUser }>("PATCH", `/api/users/${id}`, input),
 };
