@@ -67,7 +67,7 @@ const unique = Date.now().toString().slice(-6);
 const has = (list: { id: number }[], id: number) => list.some((t) => t.id === id);
 const png = { headers: { "content-type": "image/png", "x-file-name": "proof.png" }, data: PNG };
 
-test.describe.serial("coordinator (רכז): own board like a teammate, sees every board but the admin's, adds tasks to anyone, changes nothing on others' cards", () => {
+test.describe.serial("coordinator (רכז): own board like a teammate, sees every board (the admin's too), adds tasks to anyone, changes nothing on others' cards", () => {
   let coordId = 0;
   let taskForUriS = 0;
   let adminOwnTask = 0;
@@ -96,23 +96,22 @@ test.describe.serial("coordinator (רכז): own board like a teammate, sees ever
     templateForUriS = (await rec.json()).recurringId;
   });
 
-  test("the coordinator sees their own board and every other board except the admin's", async ({ request }) => {
+  test("the coordinator sees every board, the admin's included (7.9)", async ({ request }) => {
     await apiLogin(request, coordId);
     const me = await (await request.get("/api/me")).json();
     expect(me.user.role).toBe("coordinator");
-    const expected = me.users
-      .filter((u: { id: number; role: string }) => u.id === coordId || (u.role !== "admin" && u.role !== "coordinator"))
-      .map((u: { id: number }) => u.id)
-      .sort((a: number, b: number) => a - b);
+    const expected = me.users.map((u: { id: number }) => u.id).sort((a: number, b: number) => a - b);
     expect([...me.visibleUserIds].sort((a: number, b: number) => a - b)).toEqual(expected);
-    expect(me.visibleUserIds).not.toContain(1);
+    expect(me.visibleUserIds).toContain(1);
     const board = await (await request.get(`/api/tasks/board?date=${me.today}`)).json();
     expect(has(board.tasks, taskForUriS)).toBeTruthy();
     expect(has(board.tasks, adminTaskForCoord)).toBeTruthy();
-    expect(board.tasks.some((t: { assigneeId: number }) => t.assigneeId === 1)).toBeFalsy();
+    expect(has(board.tasks, adminOwnTask)).toBeTruthy();
     expect((await request.get(`/api/tasks/${taskForUriS}`)).ok()).toBeTruthy();
     expect((await request.get(`/api/tasks/${adminTaskForCoord}`)).ok()).toBeTruthy();
-    expect((await request.get(`/api/tasks/${adminOwnTask}`)).status()).toBe(403);
+    expect((await request.get(`/api/tasks/${adminOwnTask}`)).ok()).toBeTruthy();
+    // seeing is not managing: the admin's own task stays read-only for the coordinator
+    expect((await request.post(`/api/tasks/${adminOwnTask}/status`, { data: { status: "in_progress", note: "x" } })).status()).toBe(403);
   });
 
   test("on their own card the coordinator works like any teammate: status, photos, own recurring tasks", async ({ request }) => {
@@ -168,7 +167,7 @@ test.describe.serial("coordinator (רכז): own board like a teammate, sees ever
     coordTaskForAdmin = (await r2.json()).task.id;
     const board = await (await request.get(`/api/tasks/board?date=${today}`)).json();
     expect(has(board.tasks, coordTaskForUriS)).toBeTruthy();
-    expect(has(board.sent, coordTaskForAdmin)).toBeTruthy(); // the admin's board is hidden → listed under "sent"
+    expect(has(board.tasks, coordTaskForAdmin)).toBeTruthy(); // the admin's board is visible too (7.9)
     // recurring tasks for others need managing rights
     expect((await request.post("/api/tasks", { data: { title: "קבועה", assigneeId: 3, dueDate: today, weekdays: [0, 1] } })).status()).toBe(403);
     expect((await request.patch(`/api/recurring/${templateForUriS}`, { data: { title: "שינוי" } })).status()).toBe(403);
@@ -263,7 +262,7 @@ test.describe.serial("coordinator (רכז): own board like a teammate, sees ever
     await coord.dispose();
   });
 
-  test("in the browser: own card first, the admin's card hidden, others open; controls only on the own card; teammates see the coordinator blurred", async ({ browser }) => {
+  test("in the browser: own card first, every other card open (the admin's too); controls only on the own card; teammates see the coordinator blurred", async ({ browser }) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     await uiLogin(page, COORD_NAME);
@@ -273,7 +272,8 @@ test.describe.serial("coordinator (רכז): own board like a teammate, sees ever
     await expect(page.locator('[data-testid^="card-"]').first()).toHaveAttribute("data-testid", `card-${coordId}`);
     await expect(page.getByTestId("card-3")).toBeVisible();
     await expect(page.getByTestId("card-3").locator(".blurred")).toHaveCount(0);
-    await expect(page.getByTestId("card-1").locator(".blurred")).toHaveCount(1);
+    await expect(page.getByTestId("card-1")).toBeVisible();
+    await expect(page.getByTestId("card-1").locator(".blurred")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "הוספת משימה", exact: true })).toBeVisible();
     // someone else's task: read only
     await page.getByTestId(`task-${taskForUriS}`).first().click();

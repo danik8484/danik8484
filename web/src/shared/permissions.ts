@@ -2,7 +2,7 @@ import type { PublicUser, Task } from "./types";
 
 /**
  * "רכז" (coordinator): a regular team member (own board, a direct manager, receives tasks from anyone) who in
- * addition SEES every non-admin, non-coordinator board and may add a task to anyone (the same way any teammate
+ * addition SEES every board (the admin's too) and may add a task to anyone (the same way any teammate
  * sends a request). On other people's boards they change nothing: no status, no notes, no photos.
  * The client hides the buttons; the server enforces every rule below.
  */
@@ -13,8 +13,8 @@ export function isCoordinator(u: Pick<PublicUser, "role">): boolean {
 /** Which users' cards the viewer may see. */
 export function visibleUserIds(viewer: PublicUser, all: PublicUser[]): number[] {
   if (viewer.role === "admin") return all.map((u) => u.id);
-  // A coordinator sees their own board and everyone else's, except the admin's (and other coordinators').
-  if (isCoordinator(viewer)) return all.filter((u) => u.id === viewer.id || (u.role !== "admin" && !isCoordinator(u))).map((u) => u.id);
+  // A coordinator sees every board, the admin's included (7.9, Dani: "תחשפי לגיא את כל הלוזים").
+  if (isCoordinator(viewer)) return all.map((u) => u.id);
   return all.filter((u) => u.id === viewer.id || u.managerId === viewer.id).map((u) => u.id);
 }
 
