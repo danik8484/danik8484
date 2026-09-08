@@ -300,7 +300,7 @@ test("recurring: sits on the board until done (no second copy, not 'carried over
   expect((await request.patch(`/api/recurring/${templateId}`, { data: { weekdays: [0, 1, 2, 3, 4, 5, 6] } })).ok()).toBeTruthy();
   expect((await board()).map((t) => [t.id, t.dueDate, t.status])).toEqual([[first.id, yesterday, "open"]]);
   expect((await (await request.get(`/api/tasks/${first.id}`)).json()).task.reminderAt).toBe("2030-01-01T00:00:00.000Z");
-  // the morning report lists it once, without the "(מ-…)" carry-over mark
+  // the morning report lists it once, and there is no "(מ-…)" carry-over mark anywhere any more
   const preview = await (await request.get("/api/settings/morning-report/preview")).json();
   const lines: string[] = preview.people.find((p: { userId: number }) => p.userId === URI_H).lines.filter((l: string) => l.includes(`קבועה יושבת ${tag}`));
   expect(lines).toHaveLength(1);

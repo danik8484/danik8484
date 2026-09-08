@@ -265,8 +265,8 @@ export async function morningReportLines(db: Db, userId: number, today: string, 
   rows.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || a.dueDate.localeCompare(b.dueDate) || a.id - b.id);
   return rows.map((t) => {
     const by = t.createdById !== t.assigneeId ? shortName(team.find((u) => u.id === t.createdById)?.name ?? "", team, t.createdById) : "";
-    const late = t.dueDate < today && !t.recurringId && t.status === "open" ? ` (מ-${t.dueDate.slice(8, 10)}.${t.dueDate.slice(5, 7)})` : "";
-    return `• ${priorityPrefix(t.priority)}${t.title}${t.recurringId ? " (קבועה)" : ""}${by ? ` · מאת ${by}` : ""}${late}${t.status === "in_progress" ? " · בתהליך" : ""}`;
+    // No "carried over" marks anywhere (8.9, Dani): an open task simply stays until it is done.
+    return `• ${priorityPrefix(t.priority)}${t.title}${t.recurringId ? " (קבועה)" : ""}${by ? ` · מאת ${by}` : ""}${t.status === "in_progress" ? " · בתהליך" : ""}`;
   });
 }
 

@@ -87,9 +87,7 @@ export default function Board() {
     const done = asOf.filter((t) => t.status === "done").length;
     const inProgress = asOf.filter((t) => t.status === "in_progress").length;
     const open = asOf.filter((t) => t.status === "open").length;
-    // "Carried over" = not even started past its date. "In progress" is ongoing work, not carried over (7.9).
-    const overdue = asOf.filter((t) => t.status === "open" && !t.recurringId && daysBetween(t.dueDate, date) > 0).length;
-    return { done, inProgress, open, overdue, total: asOf.length };
+    return { done, inProgress, open, total: asOf.length };
   }, [asOf, date]);
 
   const isToday = date === s.today;
@@ -129,11 +127,6 @@ export default function Board() {
           <span className="text-slate-700">
             <b>{summary.open}</b> פתוחות
           </span>
-          {summary.overdue > 0 && (
-            <span className="text-red-600">
-              <b>{summary.overdue}</b> נגררות
-            </span>
-          )}
         </div>
       )}
       <ErrorText>{error}</ErrorText>
@@ -410,7 +403,6 @@ function SectionHeader({ children, tone }: { children: React.ReactNode; tone: "r
 
 function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onOpen: (id: number) => void }) {
   const s = useSession();
-  const overdue = task.status === "open" && !task.recurringId ? daysBetween(task.dueDate, viewDate) : 0;
   const byOther = task.createdById !== task.assigneeId;
   return (
     <li>
@@ -437,7 +429,6 @@ function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onO
             {task.recurringId && <span className="text-sky-700">קבועה</span>}
             {!!task.photoCount && <span title="תמונות">📷 {task.photoCount}</span>}
             {task.kind === "leads" && task.metricCalls != null && <span className="font-semibold text-emerald-700">שיחות: {task.metricCalls}</span>}
-            {overdue > 0 && <span className="font-semibold text-red-600">נגררת {overdue} ימים</span>}
             {task.status === "done" && task.completedAt && <span className="text-brand-700">הושלם {new Date(task.completedAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>}
           </span>
         </span>
