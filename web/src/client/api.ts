@@ -44,7 +44,7 @@ export const api = {
   me: () => request<MeResponse>("GET", "/api/me"),
   board: (date: string) => request<BoardResponse>("GET", `/api/tasks/board?date=${date}`),
   task: (id: number) => request<TaskDetailResponse>("GET", `/api/tasks/${id}`),
-  createTask: (input: { title: string; details: string; assigneeId: number; dueDate: string; weekdays?: number[]; kind?: "normal" | "leads"; priority?: TaskPriority; notifyNow?: boolean }) =>
+  createTask: (input: { title: string; details: string; assigneeId: number; dueDate: string; weekdays?: number[]; kind?: "normal" | "leads"; priority?: TaskPriority; notifyNow?: boolean; programFor?: string }) =>
     request<{ ok: true; task?: Task; recurringId?: number }>("POST", "/api/tasks", input),
   updateTask: (id: number, input: { title?: string; details?: string; dueDate?: string; assigneeId?: number; priority?: TaskPriority }) =>
     request<{ ok: true; task: Task }>("PATCH", `/api/tasks/${id}`, input),
@@ -52,6 +52,7 @@ export const api = {
     request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/status`, { status, note, ...(metrics ?? {}) }),
   deleteTask: (id: number, reason: string) => request<{ ok: true }>("DELETE", `/api/tasks/${id}`, { reason }),
   setReminder: (id: number, reminderAt: string | null, everyMin?: number) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/reminder`, { reminderAt, everyMin }),
+  programAdvance: (id: number) => request<{ ok: true; task: Task }>("POST", `/api/tasks/${id}/program-advance`),
   nudge: (id: number) => request<{ ok: true; delivered: "push" | "whatsapp" | "both" | "none" }>("POST", `/api/tasks/${id}/nudge`),
   clarifyAnswer: (id: number, answer: string) => request<{ ok: true; delivered: "push" | "whatsapp" | "both" | "none"; task: Task }>("POST", `/api/tasks/${id}/clarify-answer`, { answer }),
   clarify: (id: number, question: string) => request<{ ok: true; delivered: "push" | "whatsapp" | "both" | "none" }>("POST", `/api/tasks/${id}/clarify`, { question }),

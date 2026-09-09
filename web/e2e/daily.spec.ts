@@ -333,6 +333,65 @@ test("notifications off for one person: nothing is sent or queued to them, and i
   expect((await request.delete(`/api/tasks/${id}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
 });
 
+test("training program: build → send → done, with the title changing at each step", async ({ request }) => {
+  await apiLogin(request, ADMIN);
+  const d = await today(request);
+  expect((await request.post("/api/tasks", { data: { title: "x", assigneeId: URI_H, dueDate: d, programFor: "" } })).ok()).toBeTruthy(); // empty = an ordinary task
+  expect((await request.post("/api/tasks", { data: { title: "x", assigneeId: URI_H, dueDate: d, programFor: "יוסי כהן", weekdays: [1] } })).status()).toBe(400);
+  const created = await (await request.post("/api/tasks", { data: { title: "ignored", assigneeId: URI_H, dueDate: d, programFor: `יוסי כהן ${tag}` } })).json();
+  const id = created.task.id;
+  expect(created.task.title).toBe(`בניית תוכנית ליוסי כהן ${tag}`);
+  expect(created.task.programStage).toBe("build");
+  // another employee cannot press the step buttons; the coach can
+  await apiLogin(request, 3);
+  expect((await request.post(`/api/tasks/${id}/program-advance`)).status()).toBe(403);
+  await apiLogin(request, URI_H);
+  const step1 = await (await request.post(`/api/tasks/${id}/program-advance`)).json();
+  expect(step1.task.title).toBe(`שליחת תוכנית ליוסי כהן ${tag}`);
+  expect(step1.task.programStage).toBe("send");
+  expect(step1.task.status).toBe("open");
+  const step2 = await (await request.post(`/api/tasks/${id}/program-advance`)).json();
+  expect(step2.task.status).toBe("done");
+  expect(step2.task.completedById).toBe(URI_H);
+  expect((await request.post(`/api/tasks/${id}/program-advance`)).status()).toBe(400);
+  const detail = await (await request.get(`/api/tasks/${id}`)).json();
+  const notes = detail.events.map((e: { note: string }) => e.note);
+  expect(notes.some((n: string) => n.includes("התוכנית נבנתה"))).toBeTruthy();
+  expect(notes.some((n: string) => n.includes("התוכנית נשלחה"))).toBeTruthy();
+  // an ordinary task has no step button
+  await apiLogin(request, ADMIN);
+  expect((await request.post(`/api/tasks/${created.task.id}/program-advance`)).status()).toBe(400);
+  expect((await request.delete(`/api/tasks/${id}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
+test("in the browser: creating a program task from the form, then the two step buttons", async ({ browser, request }) => {
+  await apiLogin(request, ADMIN);
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await uiLogin(page, "דני שקנבסקי");
+  await page.getByRole("button", { name: "הוספת משימה", exact: true }).click();
+  await page.getByTestId("program-toggle").check();
+  await page.getByTestId("program-for").fill(`דנה לוי ${tag}`);
+  await page.getByRole("button", { name: "הוספה" }).click();
+  await expect(page.getByTestId("card-1").getByText(`בניית תוכנית לדנה לוי ${tag}`)).toBeVisible();
+  await page.getByTestId("card-1").getByText(`בניית תוכנית לדנה לוי ${tag}`).click();
+  await expect(page.getByTestId("program")).toContainText("שלב 1 מתוך 2");
+  await expect(page.getByText("עדכון סטטוס")).toHaveCount(0);
+  await page.getByTestId("program-advance").click();
+  await expect(page.getByTestId("program")).toContainText("שלב 2 מתוך 2");
+  await expect(page.getByTestId("program-advance")).toHaveText("נשלח ✓");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("group-new-1").getByText(`שליחת תוכנית לדנה לוי ${tag}`)).toBeVisible();
+  await page.getByTestId("card-1").getByText(`שליחת תוכנית לדנה לוי ${tag}`).click();
+  await page.getByTestId("program-advance").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("group-done-1").getByText(`שליחת תוכנית לדנה לוי ${tag}`)).toBeVisible();
+  await ctx.close();
+  const board = await (await request.get("/api/tasks/board")).json();
+  const t = board.tasks.find((x: { title: string }) => x.title === `שליחת תוכנית לדנה לוי ${tag}`);
+  expect((await request.delete(`/api/tasks/${t.id}`, { data: { reason: "ניקוי בדיקה" } })).ok()).toBeTruthy();
+});
+
 test("in the browser: the push button and the interval picker are there", async ({ browser, request }) => {
   await apiLogin(request, ADMIN);
   const d = await today(request);

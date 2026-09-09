@@ -128,6 +128,22 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
     }
   }
 
+  /** "הכנת תוכנית": step 1 "נבנה ✓" → the task becomes "שליחת תוכנית"; step 2 "נשלח ✓" → done. */
+  async function advanceProgram() {
+    if (!task) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.programAdvance(task.id);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** "Push": send the task to its person again, right now. */
   async function sendNudge() {
     if (!task) return;
@@ -380,7 +396,20 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
           {!task.deletedAt && canChangeStatus && task.status === "done" && !canDone && (
             <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-700">המשימה סומנה כהושלמה על ידי {s.nameOf(task.completedById)}. רק בעל המשימה או המנהל שלו יכולים לפתוח אותה מחדש.</p>
           )}
-          {!task.deletedAt && canChangeStatus && !(task.status === "done" && !canDone) && (
+          {!task.deletedAt && canChangeStatus && task.programStage && task.programFor && task.status !== "done" && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3" data-testid="program">
+              <div className="text-sm font-semibold text-ink-800">
+                {task.programStage === "build" ? `שלב 1 מתוך 2: לבנות את התוכנית ל${task.programFor}` : `שלב 2 מתוך 2: לשלוח את התוכנית ל${task.programFor}`}
+              </div>
+              <p className="mt-1 text-xs text-slate-600">
+                {task.programStage === "build" ? 'כשהתוכנית מוכנה לחץ "נבנה". המשימה תהפוך ל"שליחת תוכנית" ותישאר עד שתשלח.' : 'אחרי ששלחת את התוכנית לחץ "נשלח". המשימה תסומן כהושלמה.'}
+              </p>
+              <Button className="mt-2 w-full" disabled={busy} onClick={advanceProgram} data-testid="program-advance">
+                {task.programStage === "build" ? "נבנה ✓" : "נשלח ✓"}
+              </Button>
+            </div>
+          )}
+          {!task.deletedAt && canChangeStatus && !(task.status === "done" && !canDone) && !(task.programStage && task.status !== "done") && (
             <div className="rounded-xl border border-slate-200 p-3">
               <span className="mb-2 block text-sm font-semibold text-ink-700">עדכון סטטוס</span>
               <div className="grid grid-cols-3 gap-1.5" role="radiogroup">

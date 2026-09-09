@@ -64,6 +64,10 @@ export interface DealsResponse {
 export const REMINDER_INTERVALS = [30, 60, 120, 180, 1440] as const;
 export const REMINDER_INTERVAL_LABEL: Record<number, string> = { 30: "חצי שעה", 60: "שעה", 120: "שעתיים", 180: "3 שעות", 1440: "פעם ביום" };
 
+/** Training-program task ("הכנת תוכנית"): step 1 build, step 2 send; the title follows the step. */
+export type ProgramStage = "build" | "send";
+export const PROGRAM_TITLE: Record<ProgramStage, (name: string) => string> = { build: (n) => `בניית תוכנית ל${n}`, send: (n) => `שליחת תוכנית ל${n}` };
+
 /** clarify = the person the task belongs to asked whoever gave it what exactly is wanted ("צריך חידוד"). */
 export type EventType = "created" | "status" | "note" | "edited" | "reassigned" | "deleted" | "photo" | "photo_removed" | "reminder" | "clarify" | "clarify_answer";
 
@@ -101,6 +105,9 @@ export interface Task {
   metricDeals: number | null;
   metricCalls: number | null;
   deals: Deal[];
+  /** Training-program task ("הכנת תוכנית"): who it is for, and which of the two steps is open. */
+  programFor: string | null;
+  programStage: ProgramStage | null;
   createdDate: string;
   createdAt: string;
   updatedAt: string;

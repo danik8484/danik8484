@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { Task, TaskPriority } from "@shared/types";
+import { PROGRAM_TITLE, type Task, type TaskPriority } from "@shared/types";
 import { api } from "../api";
 import { useSession } from "../state";
 import { Button, ErrorText, Field, inputCls } from "./ui";
@@ -28,6 +28,8 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
   const [recurring, setRecurring] = useState(forceRecurring);
   const [weekdays, setWeekdays] = useState<number[]>([0, 1, 2, 3, 4]);
   const [leads, setLeads] = useState(false);
+  const [program, setProgram] = useState(false);
+  const [programFor, setProgramFor] = useState("");
   const [priority, setPriority] = useState<TaskPriority>(existing?.priority ?? "normal");
   const [notifyNow, setNotifyNow] = useState(false);
   // Recurring tasks are for people whose board you manage (a coordinator manages only their own).
@@ -51,9 +53,11 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
         await api.updateTask(existing.id, { title, details, ...(existing.recurringId ? {} : { dueDate, assigneeId, priority }) });
       } else {
         if (recurring && weekdays.length === 0) throw new Error("יש לבחור לפחות יום אחד");
+        if (program && !recurring && programFor.trim().length < 2) throw new Error("חובה למלא למי התוכנית (שם המתאמן)");
         await api.createTask({
-          title,
+          title: program && !recurring ? PROGRAM_TITLE.build(programFor.trim()) : title,
           details,
+          ...(program && !recurring ? { programFor: programFor.trim() } : {}),
           assigneeId,
           dueDate,
           weekdays: recurring ? weekdays : [],
@@ -72,9 +76,21 @@ export default function TaskForm({ defaultAssigneeId, defaultDate, existing, for
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <Field label="משימה">
-        <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} autoFocus placeholder="למשל: להתקשר ל-5 לידים חדשים" />
-      </Field>
+      {!existing && !recurring && (
+        <label className="flex items-center gap-2 text-sm font-semibold text-ink-700">
+          <input type="checkbox" className="size-4 accent-brand-600" checked={program} onChange={(e) => setProgram(e.target.checked)} data-testid="program-toggle" />
+          הכנת תוכנית אימונים (שני שלבים: לבנות, ואז לשלוח)
+        </label>
+      )}
+      {program && !recurring && !existing ? (
+        <Field label="למי התוכנית? (שם המתאמן)" hint={programFor.trim() ? `המשימה תיקרא: ${PROGRAM_TITLE.build(programFor.trim())} · אחרי "נבנה ✓" תהפוך ל: ${PROGRAM_TITLE.send(programFor.trim())}` : undefined}>
+          <input className={inputCls} value={programFor} onChange={(e) => setProgramFor(e.target.value)} required maxLength={100} autoFocus placeholder="למשל: יוסי כהן" data-testid="program-for" />
+        </Field>
+      ) : (
+        <Field label="משימה">
+          <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} autoFocus placeholder="למשל: להתקשר ל-5 לידים חדשים" />
+        </Field>
+      )}
       <Field label="פירוט">
         <textarea className={inputCls} rows={3} value={details} onChange={(e) => setDetails(e.target.value)} maxLength={3000} />
       </Field>

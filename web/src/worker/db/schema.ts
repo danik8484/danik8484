@@ -83,6 +83,8 @@ export const tasks = sqliteTable(
     metricDeals: integer("metric_deals"),
     metricCalls: integer("metric_calls"),
     dealsJson: text("deals_json"),
+    programFor: text("program_for"), // training-program task: the trainee's name
+    programStage: text("program_stage", { enum: ["build", "send"] }), // build → send → done
     deletedAt: text("deleted_at"),
     deletedById: integer("deleted_by_id"),
     deleteReason: text("delete_reason"),

@@ -1,4 +1,4 @@
-import { PAYMENT_METHODS, type PublicUser, type Task, type TaskEvent, type RecurringTask, type TaskStatus, type EventType, type Attachment, type Deal, type PaymentMethod } from "@shared/types";
+import { type ProgramStage, PAYMENT_METHODS, type PublicUser, type Task, type TaskEvent, type RecurringTask, type TaskStatus, type EventType, type Attachment, type Deal, type PaymentMethod } from "@shared/types";
 import type { UserRow, TaskRow, TaskEventRow, RecurringRow, AttachmentRow } from "./db/schema";
 
 export function parseDeals(json: string | null): Deal[] {
@@ -73,6 +73,8 @@ export function toTask(t: TaskRow): Task {
     metricDeals: t.metricDeals,
     metricCalls: t.metricCalls,
     deals: parseDeals(t.dealsJson),
+    programFor: t.programFor ?? null,
+    programStage: (t.programStage as ProgramStage | null) ?? null,
     createdDate: t.createdDate,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,

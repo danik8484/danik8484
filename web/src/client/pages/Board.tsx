@@ -429,6 +429,7 @@ function TaskRow({ task, viewDate, onOpen }: { task: Task; viewDate: string; onO
             {task.recurringId && <span className="text-sky-700">קבועה</span>}
             {!!task.photoCount && <span title="תמונות">📷 {task.photoCount}</span>}
             {task.kind === "leads" && task.metricCalls != null && <span className="font-semibold text-emerald-700">שיחות: {task.metricCalls}</span>}
+            {task.programStage && task.status !== "done" && <span className="font-semibold text-violet-700">{task.programStage === "build" ? "תוכנית · שלב 1: לבנות" : "תוכנית · שלב 2: לשלוח"}</span>}
             {task.status === "done" && task.completedAt && <span className="text-brand-700">הושלם {new Date(task.completedAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>}
           </span>
         </span>

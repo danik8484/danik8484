@@ -10,6 +10,7 @@ import { endOfLocalDay, isIsoDate, localDate, nowIso, startOfLocalDay, weekdayOf
 import { materializeRecurring } from "../recurring";
 import { visibleIdsFor } from "../team";
 import { canAssignTask, canChangeStatus, canEditOrDelete, canManage, canOpenTask, canSeeActivityLog, canSeeDeals, isCoordinator, noteRequiredForInProgress } from "@shared/permissions";
+import { PROGRAM_TITLE } from "@shared/types";
 import { int, readJson, str, weekdays as parseWeekdays } from "../validate";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, REMINDER_INTERVALS, REMINDER_INTERVAL_LABEL, isStandingOrder, type BoardResponse, type Deal, type DealsResponse, type PaymentMethod, type TaskPriority, type TaskStatus } from "@shared/types";
 import { getSettings } from "../settings";
@@ -111,6 +112,13 @@ taskRoutes.post("/", async (c) => {
   const kind = body.kind === "leads" ? "leads" : "normal";
   const priority = parsePriority(body.priority);
   if (priority === null) return c.json({ error: "חשיבות לא תקינה" }, 400);
+  // "הכנת תוכנית": a two-step task for a coach – build the program for a trainee, then send it (9.9).
+  let programFor: string | null = null;
+  if (body.programFor !== undefined && body.programFor !== null && body.programFor !== "") {
+    programFor = str(body.programFor, 100);
+    if (!programFor) return c.json({ error: "חובה למלא למי התוכנית (שם המתאמן)" }, 400);
+    if (wds.length > 0) return c.json({ error: "הכנת תוכנית היא משימה חד-פעמית, לא קבועה" }, 400);
+  }
   if (wds.length > 0) {
     const rec = await db
       .insert(recurringTasks)
@@ -128,10 +136,23 @@ taskRoutes.post("/", async (c) => {
 
   const row = await db
     .insert(tasks)
-    .values({ title, details, assigneeId, createdById: me.id, dueDate, createdDate: today, kind, priority })
+    .values({
+      title: programFor ? PROGRAM_TITLE.build(programFor) : title,
+      details,
+      assigneeId,
+      createdById: me.id,
+      dueDate,
+      createdDate: today,
+      kind,
+      priority,
+      ...(programFor ? { programFor, programStage: "build" as const } : {}),
+    })
     .returning()
     .get();
-  await db.insert(taskEvents).values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open", note: priority !== "normal" ? PRIORITY_NOTE[priority] : "" }).run();
+  await db
+    .insert(taskEvents)
+    .values({ taskId: row.id, actorId: me.id, type: "created", toStatus: "open", note: [priority !== "normal" ? PRIORITY_NOTE[priority] : "", programFor ? "הכנת תוכנית: שלב 1 – לבנות, שלב 2 – לשלוח" : ""].filter(Boolean).join(" · ") })
+    .run();
   // Anyone may send the full task right now instead of waiting for the batched digest (owner's rule, 6.9).
   const notifyNow = body.notifyNow === true && assigneeId !== me.id;
   if (notifyNow) {
@@ -370,6 +391,50 @@ taskRoutes.post("/:id/reminder", async (c) => {
   const when = reminderAt ? new Intl.DateTimeFormat("he-IL", { timeZone: c.env.TIMEZONE, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(reminderAt)) : "";
   await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "reminder", note: reminderAt ? `תזכורת ל-${when}, כל ${everyLabel}` : "התזכורת בוטלה" }).run();
   c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "reminder", { extra: reminderAt ? `תזכורת ל-${when} (כל ${everyLabel} עד שמסמנים הושלם)` : "התזכורת בוטלה" }));
+  const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
+  return c.json({ ok: true, task: toTask(updated!) });
+});
+
+/** "הכנת תוכנית": step 1 "נבנה ✓" turns the task into "שליחת תוכנית ל-X"; step 2 "נשלח ✓" completes it. Whoever manages the card. */
+taskRoutes.post("/:id/program-advance", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user");
+  const id = int(c.req.param("id"));
+  if (id === null) return c.json({ error: "לא נמצא" }, 404);
+  const row = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
+  if (!row) return c.json({ error: "לא נמצא" }, 404);
+  const mePublic = toPublicUser(me, false);
+  if (!canOpenTask(mePublic, row, c.get("teamPublic"))) return c.json({ error: "אין הרשאה" }, 403);
+  if (!row.programStage || !row.programFor) return c.json({ error: "זו לא משימת הכנת תוכנית" }, 400);
+  if (!canManage(mePublic, row.assigneeId, c.get("teamPublic"))) return c.json({ error: "רק בעל המשימה או המנהל שלו מסמנים את השלבים" }, 403);
+  if (row.status === "done") return c.json({ error: "המשימה כבר הושלמה" }, 400);
+  const now = nowIso();
+  const today = localDate(c.env.TIMEZONE);
+  const team = c.get("team");
+  if (row.programStage === "build") {
+    const title = PROGRAM_TITLE.send(row.programFor);
+    await db.update(tasks).set({ title, programStage: "send", status: "open", completedAt: null, completedDate: null, completedById: null, updatedAt: now }).where(eq(tasks.id, id)).run();
+    await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "edited", fromStatus: row.status, toStatus: "open", note: `התוכנית נבנתה ✓ · עכשיו: ${title}` }).run();
+    c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "edited", { extra: `התוכנית ל${row.programFor} נבנתה ✓ – נשאר לשלוח` }));
+  } else {
+    await db
+      .update(tasks)
+      .set({ status: "done", completedAt: now, completedDate: today, completedById: me.id, reminderAt: null, reminderLastSentAt: null, updatedAt: now })
+      .where(eq(tasks.id, id))
+      .run();
+    await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "status", fromStatus: row.status, toStatus: "done", note: "התוכנית נשלחה ✓" }).run();
+    c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "status", { fromStatus: row.status, toStatus: "done", note: "התוכנית נשלחה ✓" }));
+    // Whoever gave the task hears right away, like any other "done".
+    if (row.createdById !== me.id) {
+      const creator = team.find((u) => u.id === row.createdById);
+      if (creator && creator.active === 1) {
+        const origin = new URL(c.req.url).origin;
+        c.executionCtx.waitUntil(
+          notifyUser(c.env, db, creator.id, { title: "✅ התוכנית נשלחה", body: `${row.title} · על ידי ${shortName(me.name, team, me.id)}`, url: `${origin}/?task=${id}`, tag: `done-${id}` }),
+        );
+      }
+    }
+  }
   const updated = await db.select().from(tasks).where(eq(tasks.id, id)).get();
   return c.json({ ok: true, task: toTask(updated!) });
 });
