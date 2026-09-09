@@ -220,19 +220,30 @@ test.describe.serial("DND CASH: a closed deal saved here becomes a new deal ther
     expect(posted[1]).not.toHaveProperty("standingOrderMonths");
   });
 
-  test("editing a deal after it was sent never touches DND CASH; it is only flagged", async ({ request }) => {
+  test("a deal that reached DND CASH is locked: it cannot be edited or removed here, and DND CASH is never touched", async ({ request }) => {
     await apiLogin(request, RON);
     const before = ((await mock(request, "/__requests")) as Rec[]).filter((q) => q.method === "POST" && q.path === "/api/deals").length;
     const t = await task(request, ronTask);
     const edited = t.deals.map((d: Record<string, unknown>, i: number) => (i === 0 ? { ...d, amount: 5000 } : d));
-    expect((await request.post(`/api/tasks/${ronTask}/status`, { data: { status: "in_progress", note: "עודכן", deals: edited } })).ok()).toBeTruthy();
+    const r1 = await request.post(`/api/tasks/${ronTask}/status`, { data: { status: "in_progress", note: "עודכן", deals: edited } });
+    expect(r1.status()).toBe(400);
+    expect((await r1.json()).error).toContain("כבר נשלח ל-DND CASH");
+    const renamed = t.deals.map((d: Record<string, unknown>, i: number) => (i === 0 ? { ...d, name: "מישהו אחר" } : d));
+    expect((await request.post(`/api/tasks/${ronTask}/status`, { data: { status: "in_progress", note: "עודכן", deals: renamed } })).status()).toBe(400);
+    const removed = t.deals.slice(1);
+    const r3 = await request.post(`/api/tasks/${ronTask}/status`, { data: { status: "in_progress", note: "עודכן", deals: removed } });
+    expect(r3.status()).toBe(400);
+    expect((await r3.json()).error).toContain("להסיר");
+    // re-saving unchanged rows (plus a new one) is fine
+    const plusNew = [...t.deals, { name: "לקוח שלישי", amount: 700, method: "cash" }];
+    expect((await request.post(`/api/tasks/${ronTask}/status`, { data: { status: "in_progress", note: "עוד אחד", deals: plusNew } })).ok()).toBeTruthy();
     await sync(request);
     const after = await settled(request, ronTask, noneP);
-    expect(after.deals[0].amount).toBe(5000);
-    expect(after.deals[0].dnd).toMatchObject({ status: "sent", id: "deal-1", stale: true });
+    expect(after.deals[0]).toMatchObject({ amount: 4800, dnd: { status: "sent", id: "deal-1" } });
+    expect(after.deals[0].dnd.stale).toBeUndefined();
     expect(after.deals[1].dnd).toMatchObject({ status: "sent", id: "deal-2" });
-    expect(after.deals[1].dnd.stale).toBeUndefined();
-    expect(((await mock(request, "/__requests")) as Rec[]).filter((q) => q.method === "POST" && q.path === "/api/deals").length).toBe(before);
+    expect(after.deals[2].dnd).toMatchObject({ status: "sent" });
+    expect(((await mock(request, "/__requests")) as Rec[]).filter((q) => q.method === "POST" && q.path === "/api/deals").length).toBe(before + 1);
   });
 
   test("only the people on the list may mark 'sales + training'; a teammate without an agent lands as a direct deal", async ({ request }) => {
@@ -305,7 +316,7 @@ test.describe.serial("DND CASH: a closed deal saved here becomes a new deal ther
     expect((await t.json()).dnd.user.displayName).toBe("בדיקה");
     const deals = await (await request.get(`/api/deals?from=${today}&to=${today}`)).json();
     const ron = deals.deals.find((d: { name: string }) => d.name === "קלוד בדיקה");
-    expect(ron).toMatchObject({ months: 10, plusTraining: true, dnd: { status: "sent", id: "deal-1", stale: true } });
+    expect(ron).toMatchObject({ months: 10, plusTraining: true, dnd: { status: "sent", id: "deal-1" } });
     const summary = await request.post("/api/settings/dnd/sync");
     expect(summary.ok()).toBeTruthy();
     expect((await summary.json()).dnd.lastSyncAt).toBeTruthy();
@@ -327,7 +338,12 @@ test.describe.serial("DND CASH: a closed deal saved here becomes a new deal ther
     await expect(page.getByTestId("deal-months-0")).toHaveValue("10");
     await expect(page.getByTestId("deal-plus-0")).toHaveValue("plus");
     await expect(page.getByTestId("deal-dnd-0")).toContainText("נשלח ל-DND CASH");
-    await expect(page.getByTestId("deal-dnd-0")).toContainText("שונה אחרי השליחה");
+    await expect(page.getByTestId("deal-dnd-0")).toContainText("נעול");
+    await expect(page.getByTestId("deal-name-0")).toBeDisabled();
+    await expect(page.getByTestId("deal-amount-0")).toBeDisabled();
+    await expect(page.getByTestId("deal-method-0")).toBeDisabled();
+    await expect(page.getByTestId("deal-plus-0")).toBeDisabled();
+    await expect(page.getByTestId("deal-row-0").getByRole("button", { name: "הסרת נסלק" })).toHaveCount(0);
     await expect(page.getByTestId("deal-dnd-1")).toContainText("נשלח ל-DND CASH");
     await ctx.close();
   });

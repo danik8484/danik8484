@@ -250,15 +250,22 @@ taskRoutes.post("/:id/status", async (c) => {
         }
         const deal: Deal = { key, name, amount, method, ...(plusTraining ? { plusTraining: true } : {}), ...(months !== null ? { months } : {}), ...(firstDue ? { firstDue } : {}), ...(upfront !== null ? { upfront } : {}) };
         if (prev?.dnd) {
-          // DND CASH is never updated from here: a deal that was sent stays "sent" (flagged if edited); a rejected one is retried once edited.
+          // DND CASH is never updated from here, so a deal that was sent is locked (9.9: a test row was overwritten and the real
+          // customer never reached payroll). A rejected one is retried once edited.
           const edited =
             prev.name !== name || prev.amount !== amount || prev.method !== method || !!prev.plusTraining !== plusTraining || (prev.months ?? null) !== months || (prev.firstDue ?? null) !== firstDue || (prev.upfront ?? null) !== upfront;
-          if (prev.dnd.status === "sent") deal.dnd = { ...prev.dnd, ...(prev.dnd.stale || edited ? { stale: true } : {}) };
-          else if (prev.dnd.status === "error" && edited) deal.dnd = { status: "pending", attempts: 0 };
+          if (prev.dnd.status === "sent") {
+            if (edited) return c.json({ error: `הנסלק ${prev.name} כבר נשלח ל-DND CASH ואי אפשר לשנות אותו כאן. לקוח חדש – בשורה חדשה. תיקון – דרך דני.` }, 400);
+            deal.dnd = prev.dnd;
+          } else if (prev.dnd.status === "error" && edited) deal.dnd = { status: "pending", attempts: 0 };
           else deal.dnd = prev.dnd;
         } else if (dndOn) deal.dnd = { status: "pending", attempts: 0 };
         deals.push(deal);
       }
+      // A deal that reached DND CASH cannot be removed here either – it would stay in payroll with nothing to match.
+      const kept = new Set(deals.map((d) => d.key));
+      const removedSent = existing.find((d) => d.key && d.dnd?.status === "sent" && !kept.has(d.key));
+      if (removedSent) return c.json({ error: `הנסלק ${removedSent.name} כבר נשלח ל-DND CASH ואי אפשר להסיר אותו כאן. תיקון – דרך דני.` }, 400);
       const shown = (d: Deal) => ({ name: d.name, amount: d.amount, method: d.method, plusTraining: !!d.plusTraining, months: d.months ?? null, firstDue: d.firstDue ?? null, upfront: d.upfront ?? null });
       const userChanged = JSON.stringify(deals.map(shown)) !== JSON.stringify(existing.map(shown));
       const json = deals.length ? JSON.stringify(deals) : null;

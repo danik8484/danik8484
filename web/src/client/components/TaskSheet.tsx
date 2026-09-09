@@ -446,14 +446,18 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                     </div>
                     {dealsOpen && (
                       <div className="mt-2 space-y-3">
-                        {deals.map((d, i) => (
-                          <div key={i} className="rounded-xl border border-emerald-200 bg-white p-2">
+                        {deals.map((d, i) => {
+                          // Sent to DND CASH = locked: payroll already has it, and DND CASH is never updated from here.
+                          const locked = d.dnd?.status === "sent";
+                          return (
+                          <div key={i} className={`rounded-xl border p-2 ${locked ? "border-emerald-300 bg-emerald-50/40" : "border-emerald-200 bg-white"}`} data-testid={`deal-row-${i}`}>
                             <div className="flex items-center gap-2">
                               <div className="min-w-0 flex-1">
                                 <input
                                   className={inputCls}
                                   placeholder="שם מלא של הלקוח"
                                   value={d.name}
+                                  disabled={locked}
                                   onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
                                   data-testid={`deal-name-${i}`}
                                 />
@@ -466,22 +470,28 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                                   className={inputCls}
                                   placeholder="סכום ₪"
                                   value={d.amount}
+                                  disabled={locked}
                                   onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))}
                                   data-testid={`deal-amount-${i}`}
                                 />
                               </div>
-                              <button
-                                type="button"
-                                className="grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
-                                aria-label="הסרת נסלק"
-                                onClick={() => setDeals((arr) => arr.filter((_, j) => j !== i))}
-                              >
-                                ✕
-                              </button>
+                              {locked ? (
+                                <span className="grid size-9 shrink-0 place-items-center text-emerald-700" title="נשלח ל-DND CASH – נעול">🔒</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                                  aria-label="הסרת נסלק"
+                                  onClick={() => setDeals((arr) => arr.filter((_, j) => j !== i))}
+                                >
+                                  ✕
+                                </button>
+                              )}
                             </div>
                             <select
                               className={`${inputCls} mt-2`}
                               value={d.method}
+                              disabled={locked}
                               onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, method: e.target.value as PaymentMethod | "" } : x)))}
                               data-testid={`deal-method-${i}`}
                             >
@@ -505,6 +515,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                                       className={`${inputCls} mt-1`}
                                       value={d.months}
                                       onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, months: e.target.value } : x)))}
+                                      disabled={locked}
                                       data-testid={`deal-months-${i}`}
                                     />
                                   </label>
@@ -517,6 +528,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                                       className={`${inputCls} mt-1`}
                                       value={d.upfront}
                                       onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, upfront: e.target.value } : x)))}
+                                      disabled={locked}
                                       data-testid={`deal-upfront-${i}`}
                                     />
                                   </label>
@@ -527,6 +539,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                                       className={`${inputCls} mt-1`}
                                       value={d.firstDue}
                                       onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, firstDue: e.target.value } : x)))}
+                                      disabled={locked}
                                       data-testid={`deal-firstdue-${i}`}
                                     />
                                   </label>
@@ -546,6 +559,7 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                                   className={`${inputCls} mt-1`}
                                   value={d.plusTraining ? "plus" : "sales"}
                                   onChange={(e) => setDeals((arr) => arr.map((x, j) => (j === i ? { ...x, plusTraining: e.target.value === "plus" } : x)))}
+                                  disabled={locked}
                                   data-testid={`deal-plus-${i}`}
                                 >
                                   <option value="sales">מכירה בלבד (10%)</option>
@@ -558,10 +572,12 @@ export default function TaskSheet({ taskId, viewDate, onClose, onChanged }: Prop
                                 {DND_STATUS_LABEL[d.dnd.status]}
                                 {d.dnd.error ? ` · ${d.dnd.error}` : ""}
                                 {d.dnd.stale ? " · שונה אחרי השליחה, לעדכן ידנית ב-DND CASH" : ""}
+                                {locked ? " · נעול. לקוח חדש – בשורה חדשה; תיקון – דרך דני" : ""}
                               </p>
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                         {dealsIncomplete && <p className="text-xs text-red-600">לכל נסלק חובה שם מלא, סכום ואמצעי תשלום. להוראת קבע גם מספר חודשים.</p>}
                         <button type="button" className="text-sm font-semibold text-brand-700" onClick={() => setDeals((arr) => [...arr, { ...EMPTY_DEAL }])} data-testid="deal-add">
                           + עוד לקוח
