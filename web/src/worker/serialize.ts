@@ -1,5 +1,5 @@
-import { type ProgramStage, PAYMENT_METHODS, type PublicUser, type Task, type TaskEvent, type RecurringTask, type TaskStatus, type EventType, type Attachment, type Deal, type PaymentMethod } from "@shared/types";
-import type { UserRow, TaskRow, TaskEventRow, RecurringRow, AttachmentRow } from "./db/schema";
+import { type ProgramStage, type CallItem, type CallStatus, PAYMENT_METHODS, type PublicUser, type Task, type TaskEvent, type RecurringTask, type TaskStatus, type EventType, type Attachment, type Deal, type PaymentMethod } from "@shared/types";
+import type { UserRow, TaskRow, TaskEventRow, RecurringRow, AttachmentRow, CallItemRow } from "./db/schema";
 
 export function parseDeals(json: string | null): Deal[] {
   if (!json) return [];
@@ -126,5 +126,21 @@ export function toAttachment(a: AttachmentRow): Attachment {
     width: a.width,
     height: a.height,
     createdAt: a.createdAt,
+  };
+}
+
+export function toCallItem(r: CallItemRow): CallItem {
+  return {
+    id: r.id,
+    name: r.name,
+    phone: r.phone,
+    note: r.note,
+    createdById: r.createdById,
+    status: r.status as CallStatus,
+    takenById: r.takenById,
+    scheduledAt: r.scheduledAt,
+    taskId: r.taskId,
+    doneAt: r.doneAt,
+    createdAt: r.createdAt,
   };
 }

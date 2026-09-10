@@ -15,6 +15,7 @@ import { photoRoutes } from "./routes/photos";
 import { pushRoutes } from "./routes/push";
 import { flushDigests, sendDayEndReminders, sendTaskReminders, sendMorningReports } from "./notify";
 import { settingsRoutes } from "./routes/settings";
+import { callRoutes } from "./routes/calls";
 import { BadRequest } from "./validate";
 import { appMeta } from "./db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -91,6 +92,7 @@ app.route("/api/users", userRoutes);
 app.route("/api", photoRoutes);
 app.route("/api/push", pushRoutes);
 app.route("/api/settings", settingsRoutes);
+app.route("/api/calls", callRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "לא נמצא" }, 404));
 

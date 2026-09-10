@@ -1,4 +1,4 @@
-import type { AppSettings, Attachment, AuthConfig, BoardResponse, Deal, DealsResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskPriority, TaskStatus } from "@shared/types";
+import type { AppSettings, Attachment, AuthConfig, BoardResponse, CallItem, Deal, DealsResponse, LogEntry, MeResponse, PublicUser, RecurringTask, Task, TaskDetailResponse, TaskPriority, TaskStatus } from "@shared/types";
 
 export interface DndStatus {
   connected: boolean;
@@ -92,6 +92,12 @@ export const api = {
   pushTest: () => request<{ ok: true; delivered: number }>("POST", "/api/push/test"),
   deals: (from: string, to: string, userId?: number) => request<DealsResponse>("GET", `/api/deals?from=${from}&to=${to}${userId ? `&userId=${userId}` : ""}`),
   log: (from: string, to: string) => request<{ from: string; to: string; entries: LogEntry[] }>("GET", `/api/log?from=${from}&to=${to}`),
+  calls: () => request<{ items: CallItem[]; done: CallItem[] }>("GET", "/api/calls"),
+  addCall: (input: { name: string; phone?: string; note?: string }) => request<{ ok: true; item: CallItem }>("POST", "/api/calls", input),
+  takeCall: (id: number, at: string) => request<{ ok: true; item: CallItem; task: Task }>("POST", `/api/calls/${id}/take`, { at }),
+  releaseCall: (id: number) => request<{ ok: true; item: CallItem }>("POST", `/api/calls/${id}/release`),
+  doneCall: (id: number) => request<{ ok: true; item: CallItem }>("POST", `/api/calls/${id}/done`),
+  deleteCall: (id: number) => request<{ ok: true }>("DELETE", `/api/calls/${id}`),
   recurring: () => request<{ recurring: RecurringTask[] }>("GET", "/api/recurring"),
   updateRecurring: (id: number, input: { title?: string; details?: string; weekdays?: number[]; active?: boolean; kind?: "normal" | "leads" }) =>
     request<{ ok: true; recurring: RecurringTask }>("PATCH", `/api/recurring/${id}`, input),

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, desc, eq, gt, gte, inArray, isNull, like, lt, lte, notInArray, or, asc, sql } from "drizzle-orm";
 import type { AppEnv } from "../context";
-import { tasks, taskEvents, recurringTasks } from "../db/schema";
+import { tasks, taskEvents, recurringTasks, callItems } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
 import { listAttachments, photoCounts } from "./photos";
 import { adminFeedFor, adminFeedText, describeTask, notifyTaskNow, notifyUser, queueTaskNotification, shortName } from "../notify";
@@ -345,6 +345,9 @@ taskRoutes.post("/:id/status", async (c) => {
   if (dndPending) c.executionCtx.waitUntil(syncDndDeals(c.env, db).catch((e) => console.error("dnd sync failed", e)));
   // A recurring task keeps one open instance at a time: once it is done, today's instance is created if it is missing.
   if (changed && status === "done" && row.recurringId) await materializeRecurring(db, today, true);
+  // A task that came from the shared call list keeps the list row in step with it.
+  if (changed && status === "done") await db.update(callItems).set({ status: "done", doneAt: now, updatedAt: now }).where(and(eq(callItems.taskId, id), eq(callItems.status, "scheduled"))).run();
+  else if (changed) await db.update(callItems).set({ status: "scheduled", doneAt: null, updatedAt: now }).where(and(eq(callItems.taskId, id), eq(callItems.status, "done"))).run();
   // Whoever gave the task hears right away that it is done (unless they closed it themselves).
   if (changed && status === "done" && row.createdById !== me.id) {
     const team = c.get("team");
@@ -694,6 +697,8 @@ taskRoutes.delete("/:id", async (c) => {
   const now = nowIso();
   await db.update(tasks).set({ deletedAt: now, deletedById: me.id, deleteReason: reason, updatedAt: now }).where(eq(tasks.id, id)).run();
   await db.insert(taskEvents).values({ taskId: id, actorId: me.id, type: "deleted", fromStatus: row.status, note: reason }).run();
+  // The call goes back to the shared list when its task is removed.
+  await db.update(callItems).set({ status: "open", takenById: null, scheduledAt: null, taskId: null, updatedAt: now }).where(and(eq(callItems.taskId, id), eq(callItems.status, "scheduled"))).run();
   c.executionCtx.waitUntil(adminFeedFor(c.env, db, id, me, "deleted", { extra: `סיבה: ${reason}` }));
   return c.json({ ok: true });
 });

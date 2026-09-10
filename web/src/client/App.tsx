@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Board from "./pages/Board";
 import Recurring from "./pages/Recurring";
 import Log from "./pages/Log";
+import Calls from "./pages/Calls";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Deals from "./pages/Deals";
@@ -73,6 +74,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Board />} />
           <Route path="/recurring" element={<Recurring />} />
+          <Route path="/calls" element={<Calls />} />
           <Route path="/deals" element={canSeeDeals(session.user) ? <Deals /> : <Navigate to="/" replace />} />
           <Route path="/log" element={canSeeActivityLog(session.user) ? <Log /> : <Navigate to="/" replace />} />
           <Route path="/users" element={session.user.role === "admin" ? <Users /> : <Navigate to="/" replace />} />
@@ -104,6 +106,7 @@ function Header({ menuOpen, onToggleMenu }: { menuOpen: boolean; onToggleMenu: (
         const links = [
           { to: "/", label: "לו\"ז" },
           { to: "/recurring", label: "משימות קבועות" },
+          { to: "/calls", label: "שיחות" },
           ...(canSeeDeals(session.user) ? [{ to: "/deals", label: "נסלקים" }] : []),
           ...(canSeeActivityLog(session.user) ? [{ to: "/log", label: "יומן פעילות" }] : []),
           ...(session.user.role === "admin" ? [{ to: "/users", label: "אנשי צוות" }, { to: "/settings", label: "הגדרות" }] : []),

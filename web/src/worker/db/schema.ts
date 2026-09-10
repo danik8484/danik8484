@@ -184,3 +184,25 @@ export const notificationQueue = sqliteTable(
   },
   (t) => [index("notification_queue_pending_idx").on(t.sentAt, t.userId)],
 );
+
+/** Shared call list ("רשימת שיחות"): open → scheduled (a task with a reminder was created for the taker) → done. */
+export const callItems = sqliteTable(
+  "call_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    phone: text("phone").notNull().default(""),
+    note: text("note").notNull().default(""),
+    createdById: integer("created_by_id").notNull(),
+    status: text("status", { enum: ["open", "scheduled", "done"] }).notNull().default("open"),
+    takenById: integer("taken_by_id"),
+    scheduledAt: text("scheduled_at"),
+    taskId: integer("task_id"),
+    doneAt: text("done_at"),
+    deletedAt: text("deleted_at"),
+    createdAt: text("created_at").notNull().default(nowIso),
+    updatedAt: text("updated_at").notNull().default(nowIso),
+  },
+  (t) => [index("call_items_status_idx").on(t.status), index("call_items_task_idx").on(t.taskId)],
+);
+export type CallItemRow = typeof callItems.$inferSelect;

@@ -213,6 +213,22 @@ export interface AppSettings {
   dndPlusTrainingUserIds: number[];
 }
 
+/** A row in the shared call list. */
+export type CallStatus = "open" | "scheduled" | "done";
+export interface CallItem {
+  id: number;
+  name: string;
+  phone: string;
+  note: string;
+  createdById: number;
+  status: CallStatus;
+  takenById: number | null;
+  scheduledAt: string | null; // ISO instant of the call
+  taskId: number | null; // the task created for the taker
+  doneAt: string | null;
+  createdAt: string;
+}
+
 export interface AuthConfig {
   team: { id: number; name: string }[];
   whatsapp: boolean;
