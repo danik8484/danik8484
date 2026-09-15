@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt, lte, ne, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import type { Db } from "./db/client";
 import { appMeta, recurringTasks, tasks, taskEvents, users } from "./db/schema";
 import { weekdayOf } from "./dates";
@@ -31,12 +31,22 @@ export async function materializeRecurring(db: Db, today: string, force = false)
     if (!assigneeActive) continue;
     const days = r.weekdays.split(",").filter(Boolean).map(Number);
     if (!days.includes(wd)) continue;
-    const stillOpen = await db
-      .select({ id: tasks.id })
-      .from(tasks)
-      .where(and(eq(tasks.recurringId, r.id), isNull(tasks.deletedAt), ne(tasks.status, "done"), lt(tasks.dueDate, today)))
-      .get();
-    if (stillOpen) continue;
+    if (r.kind === "leads") {
+      // A leads task belongs to its own day (15.9): yesterday's unfilled one is not carried – its reminder goes quiet and
+      // today's fresh one is created, so whatever is filled in today is dated today.
+      await db
+        .update(tasks)
+        .set({ reminderAt: null, reminderLastSentAt: null })
+        .where(and(eq(tasks.recurringId, r.id), isNull(tasks.deletedAt), ne(tasks.status, "done"), lt(tasks.dueDate, today), isNotNull(tasks.reminderAt)))
+        .run();
+    } else {
+      const stillOpen = await db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(and(eq(tasks.recurringId, r.id), isNull(tasks.deletedAt), ne(tasks.status, "done"), lt(tasks.dueDate, today)))
+        .get();
+      if (stillOpen) continue;
+    }
     const inserted = await db
       .insert(tasks)
       .values({

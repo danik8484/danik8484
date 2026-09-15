@@ -187,7 +187,7 @@ export async function sendDayEndReminders(env: Env, db: Db, appUrl: string, now 
         and(
           isNull(tasks.deletedAt),
           eq(tasks.assigneeId, u.id),
-          lte(tasks.dueDate, today),
+          or(and(lte(tasks.dueDate, today), or(isNull(tasks.recurringId), ne(tasks.kind, "leads"))), eq(tasks.dueDate, today)),
           or(eq(tasks.status, "open"), and(eq(tasks.status, "in_progress"), eq(tasks.progressNote, ""))),
         ),
       )
@@ -259,7 +259,7 @@ export async function morningReportLines(db: Db, userId: number, today: string, 
   const rows = await db
     .select()
     .from(tasks)
-    .where(and(isNull(tasks.deletedAt), eq(tasks.assigneeId, userId), lte(tasks.dueDate, today), ne(tasks.status, "done")))
+    .where(and(isNull(tasks.deletedAt), eq(tasks.assigneeId, userId), or(and(lte(tasks.dueDate, today), or(isNull(tasks.recurringId), ne(tasks.kind, "leads"))), eq(tasks.dueDate, today)), ne(tasks.status, "done")))
     .orderBy(asc(tasks.dueDate), asc(tasks.id))
     .all();
   rows.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || a.dueDate.localeCompare(b.dueDate) || a.id - b.id);

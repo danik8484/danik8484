@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, gt, gte, inArray, isNull, like, lt, lte, notInArray, or, asc, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, like, lt, lte, ne, notInArray, or, asc, sql } from "drizzle-orm";
 import type { AppEnv } from "../context";
 import { tasks, taskEvents, recurringTasks, callItems } from "../db/schema";
 import { toTask, toEvent, toPublicUser, toAttachment } from "../serialize";
@@ -44,7 +44,8 @@ taskRoutes.get("/board", async (c) => {
     sql`(${tasks.status} = 'done' AND min(${tasks.dueDate}, coalesce(${tasks.completedDate}, ${tasks.dueDate})) <= ${d} AND max(${tasks.dueDate}, coalesce(${tasks.completedDate}, ${tasks.dueDate})) >= ${d})`;
   const notDone = or(eq(tasks.status, "open"), eq(tasks.status, "in_progress"));
   // Every open task stays on the board until it is done – a recurring one too (it just is not flagged as "carried over").
-  const openOn = (d: string) => and(notDone, lte(tasks.dueDate, d));
+  // …except a recurring leads task, which belongs to its own day only (15.9): what was not filled in yesterday is not carried.
+  const openOn = (d: string) => and(notDone, or(and(lte(tasks.dueDate, d), or(isNull(tasks.recurringId), ne(tasks.kind, "leads"))), eq(tasks.dueDate, d)));
   const sent = await db
     .select()
     .from(tasks)
